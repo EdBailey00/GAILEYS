@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1c1917"/>
+  <!-- the tug-of-war bar, mid-shove -->
+  <rect x="64" y="232" width="240" height="48" rx="24" fill="#ffb224"/>
+  <rect x="304" y="232" width="144" height="48" rx="24" fill="#46c7f0"/>
+  <!-- chalk tallies above and below: the score so far -->
+  <g stroke="#f5f0e6" stroke-width="18" stroke-linecap="round" transform="rotate(-4 256 256)">
+    <line x1="120" y1="120" x2="120" y2="180"/>
+    <line x1="160" y1="120" x2="160" y2="180"/>
+    <line x1="200" y1="120" x2="200" y2="180"/>
+    <line x1="240" y1="120" x2="240" y2="180"/>
+    <line x1="100" y1="186" x2="260" y2="114"/>
+  </g>
+  <g stroke="#f5f0e6" stroke-width="18" stroke-linecap="round" transform="rotate(4 256 256)">
+    <line x1="290" y1="330" x2="290" y2="390"/>
+    <line x1="330" y1="330" x2="330" y2="390"/>
+    <line x1="370" y1="330" x2="370" y2="390"/>
+  </g>
+</svg>
