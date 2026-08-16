@@ -26,7 +26,19 @@ import {
   weekOf,
   weekXp,
 } from '@/lib/game';
-import { load, newId, resetStreak, save, setTicks } from '@/lib/store';
+import {
+  acceptProposal,
+  freshState,
+  load,
+  newId,
+  propose,
+  rejectProposal,
+  resetStreak,
+  save,
+  setTicks,
+  unclaimChallenge,
+  untickWeek,
+} from '@/lib/store';
 
 // A floating "+10" that rises off whatever was tapped.
 interface FloatScore {
@@ -77,7 +89,8 @@ export default function Page() {
       ? 'Dead level. Someone do the dishes.'
       : `${(lead > 0 ? p1 : p2).name} leads by ${Math.abs(lead)}`;
 
-  const active = state.habits.filter(h => !h.archived);
+  // This player's board: everything shared, plus what is theirs alone.
+  const active = state.habits.filter(h => !h.archived && (!h.owner || h.owner === who));
   const daily = active.filter(h => h.kind === 'daily' || h.kind === 'multi');
   const weekly = active.filter(h => h.kind === 'weekly');
   const streaks = active.filter(h => h.kind === 'streak');
@@ -144,10 +157,23 @@ export default function Page() {
           <span>Round {state.history.length + 1}</span>
         </div>
 
-        <div className="mt-3 flex items-end justify-between">
-          <ScoreBig name={p1.name} score={scores.p1} colour={p1.colour} leading={lead > 0} align="left" />
-          <span className="font-score pb-2 text-xs" style={{ color: 'var(--chalk-dim)' }}>vs</span>
-          <ScoreBig name={p2.name} score={scores.p2} colour={p2.colour} leading={lead < 0} align="right" />
+        {/* The scoreline, read like a fixture: ED 40 - 0 ALFIE */}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="min-w-0 text-left">
+            <div className="truncate text-xl font-black uppercase tracking-tight" style={{ color: p1.colour }}>
+              {lead > 0 ? '👑 ' : ''}{p1.name}
+            </div>
+          </div>
+          <div className="font-score flex items-baseline gap-2 text-5xl font-black leading-none" style={{ transform: 'rotate(-1.5deg)' }}>
+            <span style={{ color: p1.colour }}>{scores.p1}</span>
+            <span className="text-2xl" style={{ color: 'var(--chalk-dim)' }}>–</span>
+            <span style={{ color: p2.colour }}>{scores.p2}</span>
+          </div>
+          <div className="min-w-0 text-right">
+            <div className="truncate text-xl font-black uppercase tracking-tight" style={{ color: p2.colour }}>
+              {p2.name}{lead < 0 ? ' 👑' : ''}
+            </div>
+          </div>
         </div>
 
         {/* The tug-of-war bar */}
@@ -158,40 +184,88 @@ export default function Page() {
         <p className="mt-2 text-center text-sm" style={{ color: 'var(--chalk-dim)' }}>{leadLine}</p>
       </header>
 
-      {/* ---- Who's tapping -------------------------------------------------- */}
-      <div className="mt-5 grid grid-cols-2 gap-2">
+      {/* ---- Whose board ---------------------------------------------------- */}
+      <div className="mt-5 flex overflow-hidden rounded-xl border" style={{ borderColor: 'var(--dust)' }}>
         {state.players.map(p => (
           <button
             key={p.id}
             onClick={() => setWho(p.id)}
-            className="rounded-2xl border px-3 py-3 text-left transition-transform active:scale-[0.98]"
-            style={{
-              borderColor: who === p.id ? p.colour : 'var(--dust)',
-              background: who === p.id ? 'var(--board-raised)' : 'transparent',
-              boxShadow: who === p.id ? `inset 0 0 0 1px ${p.colour}` : 'none',
-            }}
+            className="flex-1 py-3 text-center text-lg font-black uppercase tracking-wide transition-colors"
+            style={
+              who === p.id
+                ? { background: p.colour, color: 'var(--board)' }
+                : { background: 'transparent', color: 'var(--chalk-dim)' }
+            }
           >
-            <span className="text-xl">{p.emoji}</span>
-            <span className="ml-2 font-semibold">{p.name}</span>
-            <span className="font-score block text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-              {who === p.id ? 'ticking as this player' : 'tap to switch'}
-            </span>
+            {p.name}
           </button>
         ))}
       </div>
 
       {/* Level line for whoever is ticking */}
-      <div className="mt-3 rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}>
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm font-semibold">{me.name} · Level {level.level}</span>
-          <span className="font-score text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-            {level.into}/{level.needed} to next
-          </span>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full" style={{ background: 'var(--dust)' }}>
+      <div className="mt-2 flex items-center gap-3 px-1">
+        <span className="font-score text-xs font-bold whitespace-nowrap" style={{ color: me.colour }}>
+          LV {level.level}
+        </span>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--dust)' }}>
           <div className="tug h-full rounded-full" style={{ width: `${(level.into / level.needed) * 100}%`, background: me.colour }} />
         </div>
+        <span className="font-score text-[10px] whitespace-nowrap" style={{ color: 'var(--chalk-dim)' }}>
+          {level.into}/{level.needed}
+        </span>
       </div>
+
+      {/* ---- Changes waiting on this player's yes ---------------------------- */}
+      {state.proposals.filter(p => p.by !== who).length > 0 && (
+        <>
+          <SectionTitle>Needs your yes</SectionTitle>
+          <div className="space-y-2">
+            {state.proposals
+              .filter(p => p.by !== who)
+              .map(p => {
+                const byName = state.players.find(x => x.id === p.by)!.name;
+                const target = p.kind === 'retire' ? state.habits.find(h => h.id === p.habitId) : p.habit;
+                return (
+                  <div
+                    key={p.id}
+                    className="rounded-2xl border px-4 py-3"
+                    style={{ borderColor: state.players.find(x => x.id === p.by)!.colour, background: 'var(--board-raised)' }}
+                  >
+                    <div className="text-sm">
+                      <span className="font-black uppercase">{byName}</span>{' '}
+                      wants to {p.kind === 'add' ? 'add' : p.kind === 'retire' ? 'retire' : 'change'}{' '}
+                      <span className="font-semibold">
+                        {target ? `${target.emoji} ${target.name}` : 'a habit that no longer exists'}
+                      </span>
+                      {p.kind !== 'retire' && p.habit ? (
+                        <span className="font-score text-xs" style={{ color: 'var(--chalk-dim)' }}>
+                          {' '}(+{p.habit.xp}
+                          {p.habit.kind === 'multi' || p.habit.kind === 'weekly' ? `, x${p.habit.target}` : ''})
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => update(acceptProposal(state, p.id))}
+                        className="rounded-lg px-4 py-1.5 text-xs font-bold"
+                        style={{ background: 'var(--score)', color: 'var(--board)' }}
+                      >
+                        Go on then
+                      </button>
+                      <button
+                        onClick={() => update(rejectProposal(state, p.id))}
+                        className="rounded-lg border px-4 py-1.5 text-xs font-semibold"
+                        style={{ borderColor: 'var(--dust)', color: 'var(--chalk-dim)' }}
+                      >
+                        No chance
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </>
+      )}
 
       {/* ---- Today ---------------------------------------------------------- */}
       <SectionTitle>Today</SectionTitle>
@@ -201,10 +275,15 @@ export default function Page() {
           const other = ticksOn(state, habit.id, who === 'p1' ? 'p2' : 'p1', t);
           const done = habit.kind === 'multi' ? mine >= habit.target : mine >= 1;
           return (
-            <button
+            <div
               key={habit.id}
+              role="button"
+              tabIndex={0}
               onClick={e => tick(e, habit)}
-              className={`rounded-2xl border p-3 text-left transition-transform active:scale-[0.97] ${stamped === habit.id ? 'stamp' : ''}`}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') tick(e as unknown as React.MouseEvent, habit);
+              }}
+              className={`cursor-pointer rounded-2xl border p-3 text-left transition-transform active:scale-[0.97] ${stamped === habit.id ? 'stamp' : ''}`}
               style={{
                 borderColor: done ? me.colour : 'var(--dust)',
                 background: done ? 'var(--board-raised)' : 'transparent',
@@ -216,7 +295,14 @@ export default function Page() {
                   {done ? 'done' : `+${habit.xp}`}
                 </span>
               </div>
-              <div className="mt-1 text-sm font-semibold leading-tight">{habit.name}</div>
+              <div className="mt-1 text-sm font-semibold leading-tight">
+                {habit.name}
+                {habit.owner && (
+                  <span className="font-score ml-1.5 text-[9px] font-bold uppercase" style={{ color: me.colour }}>
+                    yours
+                  </span>
+                )}
+              </div>
               {habit.kind === 'multi' ? (
                 <div className="mt-2 flex gap-1">
                   {Array.from({ length: habit.target }, (_, i) => (
@@ -230,12 +316,24 @@ export default function Page() {
               ) : (
                 <div className="mt-2 h-2 rounded-full" style={{ background: done ? me.colour : 'var(--dust)' }} />
               )}
-              {other > 0 && (
+              {!habit.owner && other > 0 && (
                 <div className="font-score mt-1.5 text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
                   {state.players.find(p => p.id !== who)!.name} has this ✓
                 </div>
               )}
-            </button>
+              {habit.kind === 'multi' && mine > 0 && (
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    update(setTicks(state, habit.id, who, t, mine - 1));
+                  }}
+                  className="font-score mt-1.5 text-[10px] underline-offset-2 hover:underline"
+                  style={{ color: 'var(--chalk-dim)' }}
+                >
+                  − take one back
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -248,15 +346,27 @@ export default function Page() {
           const others = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
           const done = mine >= habit.target;
           return (
-            <button
+            <div
               key={habit.id}
+              role="button"
+              tabIndex={0}
               onClick={e => weeklyTick(e, habit)}
-              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === habit.id ? 'stamp' : ''}`}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') weeklyTick(e as unknown as React.MouseEvent, habit);
+              }}
+              className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === habit.id ? 'stamp' : ''}`}
               style={{ borderColor: done ? me.colour : 'var(--dust)', background: done ? 'var(--board-raised)' : 'transparent' }}
             >
               <span className="text-2xl">{habit.emoji}</span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold leading-tight">{habit.name}</span>
+                <span className="block text-sm font-semibold leading-tight">
+                  {habit.name}
+                  {habit.owner && (
+                    <span className="font-score ml-1.5 text-[9px] font-bold uppercase" style={{ color: me.colour }}>
+                      yours
+                    </span>
+                  )}
+                </span>
                 <span className="mt-1.5 flex gap-1">
                   {Array.from({ length: Math.max(habit.target, mine) }, (_, i) => (
                     <span
@@ -266,16 +376,30 @@ export default function Page() {
                     />
                   ))}
                 </span>
+                {mine > 0 && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      update(untickWeek(state, habit.id, who, monday));
+                    }}
+                    className="font-score mt-1 text-[10px] underline-offset-2 hover:underline"
+                    style={{ color: 'var(--chalk-dim)' }}
+                  >
+                    − take one back
+                  </button>
+                )}
               </span>
               <span className="text-right">
                 <span className="font-score block text-sm font-bold">
                   {mine}/{habit.target}
                 </span>
-                <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-                  {state.players.find(p => p.id !== who)!.name}: {others}/{habit.target}
-                </span>
+                {!habit.owner && (
+                  <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+                    {state.players.find(p => p.id !== who)!.name}: {others}/{habit.target}
+                  </span>
+                )}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -290,12 +414,15 @@ export default function Page() {
             <button
               key={ch.id}
               onClick={e => {
-                if (mineDone) return;
+                if (mineDone) {
+                  // Claimed by mistake: taking it back is one tap too.
+                  update(unclaimChallenge(state, challengeKey(ch.id), who, monday));
+                  return;
+                }
                 update(setTicks(state, challengeKey(ch.id), who, t, 1));
                 stamp(challengeKey(ch.id));
                 pop(e, `+${ch.xp}`);
               }}
-              disabled={mineDone}
               className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === challengeKey(ch.id) ? 'stamp' : ''}`}
               style={{
                 borderColor: mineDone ? 'var(--score)' : 'var(--dust)',
@@ -306,7 +433,7 @@ export default function Page() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold leading-tight">{ch.name}</span>
                 <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-                  bonus · once this week
+                  {mineDone ? 'tap to take it back' : 'once a week'}
                   {otherDone ? ` · ${state.players.find(p => p.id !== who)!.name} has it` : ''}
                 </span>
               </span>
@@ -414,6 +541,7 @@ export default function Page() {
               lastMonday.setDate(lastMonday.getDate() - 7);
               const lastKey = `${lastMonday.getFullYear()}-${String(lastMonday.getMonth() + 1).padStart(2, '0')}-${String(lastMonday.getDate()).padStart(2, '0')}`;
               const lastWeek = ticksInWeek(state, habit.id, who, lastKey);
+              const otherWeek = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
               return (
                 <div
                   key={habit.id}
@@ -426,6 +554,7 @@ export default function Page() {
                       <div className="text-sm font-semibold leading-tight">{habit.name}</div>
                       <div className="font-score mt-0.5 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
                         {week} this week{lastWeek > 0 ? ` · ${lastWeek} last week${week < lastWeek ? ' ↓' : ''}` : ''}
+                        {!habit.owner && ` · ${state.players.find(p => p.id !== who)!.name}: ${otherWeek}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -510,7 +639,7 @@ export default function Page() {
           {manage ? 'close settings' : 'players & habits'}
         </button>
       </div>
-      {manage && <Manage state={state} onChange={update} onRename={rename} />}
+      {manage && <Manage state={state} who={who} onChange={update} onRename={rename} />}
 
       {/* Floating scores */}
       {floats.map(f => (
@@ -537,42 +666,16 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ScoreBig({
-  name,
-  score,
-  colour,
-  leading,
-  align,
-}: {
-  name: string;
-  score: number;
-  colour: string;
-  leading: boolean;
-  align: 'left' | 'right';
-}) {
-  return (
-    <div className={align === 'right' ? 'text-right' : ''}>
-      <div className="font-score text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: colour }}>
-        {leading ? '👑 ' : ''}{name}
-      </div>
-      <div
-        className="font-score text-4xl font-black leading-none"
-        style={{ color: colour, transform: 'rotate(-1.5deg)' }}
-      >
-        {score}
-      </div>
-    </div>
-  );
-}
-
 // Settings: names and the habit list. Deliberately plain - the game is the
 // front page, this is the cupboard under the stairs.
 function Manage({
   state,
+  who,
   onChange,
   onRename,
 }: {
   state: GameState;
+  who: Player['id'];
   onChange: (s: GameState) => void;
   onRename: (id: Player['id'], name: string) => void;
 }) {
@@ -581,6 +684,10 @@ function Manage({
   const [kind, setKind] = useState<Habit['kind']>('daily');
   const [target, setTarget] = useState(1);
   const [xp, setXp] = useState(10);
+  const [whose, setWhose] = useState<'both' | 'mine'>('both');
+  const [notice, setNotice] = useState('');
+
+  const otherName = state.players.find(p => p.id !== who)!.name;
 
   const addHabit = () => {
     if (!name.trim()) return;
@@ -591,17 +698,58 @@ function Manage({
       kind,
       target: kind === 'tally' ? 0 : Math.max(1, target),
       xp: Math.max(1, xp),
+      ...(whose === 'mine' ? { owner: who } : {}),
     };
-    const streaks =
-      kind === 'streak'
-        ? [
-            ...state.streaks,
-            { habitId: habit.id, playerId: 'p1' as const, startedOn: today(), best: 0 },
-            { habitId: habit.id, playerId: 'p2' as const, startedOn: today(), best: 0 },
-          ]
-        : state.streaks;
-    onChange({ ...state, habits: [...state.habits, habit], streaks });
+    if (whose === 'mine') {
+      // Your own board is yours to change.
+      const streaks =
+        kind === 'streak'
+          ? [...state.streaks, { habitId: habit.id, playerId: who, startedOn: today(), best: 0 }]
+          : state.streaks;
+      onChange({ ...state, habits: [...state.habits, habit], streaks });
+      setNotice(`${habit.name} is on your board.`);
+    } else {
+      // The shared board is nobody's to change alone.
+      onChange(propose(state, { by: who, kind: 'add', habit }));
+      setNotice(`Sent to ${otherName} for a yes.`);
+    }
     setName('');
+  };
+
+  const retire = (h: Habit) => {
+    if (h.archived || h.owner) {
+      // Bringing back, or your own habit: instant.
+      onChange({
+        ...state,
+        habits: state.habits.map(x => (x.id === h.id ? { ...x, archived: !x.archived } : x)),
+      });
+      return;
+    }
+    if (state.proposals.some(p => p.kind === 'retire' && p.habitId === h.id)) return;
+    onChange(propose(state, { by: who, kind: 'retire', habitId: h.id }));
+    setNotice(`Retiring ${h.name} needs ${otherName}'s yes.`);
+  };
+
+  // Inline habit editing. Your own habits change on the spot; shared ones go
+  // to the other player as an edit proposal.
+  const [editing, setEditing] = useState<Habit | null>(null);
+
+  const saveEdit = () => {
+    if (!editing || !editing.name.trim()) return;
+    const clean: Habit = {
+      ...editing,
+      name: editing.name.trim(),
+      target: editing.kind === 'tally' ? 0 : Math.max(1, editing.target),
+      xp: Math.max(1, editing.xp),
+    };
+    if (clean.owner) {
+      onChange({ ...state, habits: state.habits.map(x => (x.id === clean.id ? clean : x)) });
+      setNotice(`${clean.name} updated.`);
+    } else {
+      onChange(propose(state, { by: who, kind: 'edit', habit: clean }));
+      setNotice(`Change to ${clean.name} sent to ${otherName} for a yes.`);
+    }
+    setEditing(null);
   };
 
   const inputStyle = {
@@ -684,13 +832,34 @@ function Manage({
             style={inputStyle}
           />
         </div>
+        <div className="mt-2 flex overflow-hidden rounded-xl border text-sm" style={{ borderColor: 'var(--dust)' }}>
+          <button
+            onClick={() => setWhose('both')}
+            className="flex-1 py-2 font-semibold"
+            style={whose === 'both' ? { background: 'var(--chalk)', color: 'var(--board)' } : { color: 'var(--chalk-dim)' }}
+          >
+            Both of us
+          </button>
+          <button
+            onClick={() => setWhose('mine')}
+            className="flex-1 py-2 font-semibold"
+            style={whose === 'mine' ? { background: 'var(--chalk)', color: 'var(--board)' } : { color: 'var(--chalk-dim)' }}
+          >
+            Just mine
+          </button>
+        </div>
         <button
           onClick={addHabit}
           className="mt-2 w-full rounded-xl py-2.5 text-sm font-bold"
           style={{ background: 'var(--chalk)', color: 'var(--board)' }}
         >
-          Add it
+          {whose === 'both' ? `Add it (${otherName} gets a say)` : 'Add it'}
         </button>
+        {notice && (
+          <p className="font-score mt-2 text-[11px]" style={{ color: 'var(--score)' }}>
+            {notice}
+          </p>
+        )}
       </div>
 
       <div>
@@ -698,31 +867,176 @@ function Manage({
           Habits
         </div>
         <div className="space-y-1">
-          {state.habits.map(h => (
-            <div
-              key={h.id}
-              className="flex items-center justify-between rounded-lg px-2 py-1 text-sm"
-              style={{ opacity: h.archived ? 0.4 : 1 }}
-            >
-              <span>
-                {h.emoji} {h.name}
-              </span>
-              <button
-                onClick={() =>
-                  onChange({
-                    ...state,
-                    habits: state.habits.map(x => (x.id === h.id ? { ...x, archived: !x.archived } : x)),
-                  })
-                }
-                className="font-score text-[11px] underline-offset-2 hover:underline"
-                style={{ color: 'var(--chalk-dim)' }}
+          {state.habits.map(h => {
+            const pendingRetire = state.proposals.some(p => p.kind === 'retire' && p.habitId === h.id);
+            return (
+              <div
+                key={h.id}
+                className="flex items-center justify-between rounded-lg px-2 py-1 text-sm"
+                style={{ opacity: h.archived ? 0.4 : 1 }}
               >
-                {h.archived ? 'bring back' : 'retire'}
+                <span>
+                  {h.emoji} {h.name}
+                  {h.owner && (
+                    <span
+                      className="font-score ml-1.5 text-[9px] font-bold uppercase"
+                      style={{ color: state.players.find(p => p.id === h.owner)!.colour }}
+                    >
+                      {state.players.find(p => p.id === h.owner)!.name}&apos;s
+                    </span>
+                  )}
+                </span>
+                {pendingRetire ? (
+                  <span className="font-score text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
+                    waiting on {otherName}
+                  </span>
+                ) : (
+                  <span className="flex gap-3">
+                    {!h.archived && (
+                      <button
+                        onClick={() => setEditing(editing?.id === h.id ? null : { ...h })}
+                        className="font-score text-[11px] underline-offset-2 hover:underline"
+                        style={{ color: 'var(--chalk-dim)' }}
+                      >
+                        edit
+                      </button>
+                    )}
+                    <button
+                      onClick={() => retire(h)}
+                      className="font-score text-[11px] underline-offset-2 hover:underline"
+                      style={{ color: 'var(--chalk-dim)' }}
+                    >
+                      {h.archived ? 'bring back' : 'retire'}
+                    </button>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* The one habit being edited, right under the list */}
+        {editing && (
+          <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--chalk-dim)' }}>
+            <div className="grid grid-cols-[1fr_56px] gap-2">
+              <input
+                value={editing.name}
+                onChange={e => setEditing({ ...editing, name: e.target.value })}
+                aria-label="Habit name"
+                className="rounded-xl border px-3 py-2 text-sm"
+                style={inputStyle}
+              />
+              <input
+                value={editing.emoji}
+                onChange={e => setEditing({ ...editing, emoji: e.target.value })}
+                aria-label="Emoji"
+                className="rounded-xl border px-3 py-2 text-center text-sm"
+                style={inputStyle}
+              />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <label className="font-score text-[10px] uppercase" style={{ color: 'var(--chalk-dim)' }}>
+                target
+                <input
+                  type="number"
+                  min={1}
+                  value={editing.target}
+                  onChange={e => setEditing({ ...editing, target: Number(e.target.value) })}
+                  disabled={editing.kind === 'daily' || editing.kind === 'streak' || editing.kind === 'tally'}
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:opacity-40"
+                  style={inputStyle}
+                />
+              </label>
+              <label className="font-score text-[10px] uppercase" style={{ color: 'var(--chalk-dim)' }}>
+                points
+                <input
+                  type="number"
+                  min={1}
+                  value={editing.xp}
+                  onChange={e => setEditing({ ...editing, xp: Number(e.target.value) })}
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={saveEdit}
+                className="rounded-lg px-4 py-1.5 text-xs font-bold"
+                style={{ background: 'var(--chalk)', color: 'var(--board)' }}
+              >
+                {editing.owner ? 'Save' : `Save (${otherName} gets a say)`}
+              </button>
+              <button
+                onClick={() => setEditing(null)}
+                className="rounded-lg border px-4 py-1.5 text-xs"
+                style={{ borderColor: 'var(--dust)' }}
+              >
+                Cancel
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* My own proposals still out for a yes */}
+        {state.proposals.filter(p => p.by === who && p.kind === 'add').length > 0 && (
+          <div className="mt-3 space-y-1">
+            {state.proposals
+              .filter(p => p.by === who && p.kind === 'add')
+              .map(p => (
+                <div key={p.id} className="font-score px-2 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
+                  {p.habit?.emoji} {p.habit?.name} - waiting on {otherName}&apos;s yes
+                </div>
+              ))}
+          </div>
+        )}
       </div>
+
+      <FreshStart onChange={onChange} />
+    </div>
+  );
+}
+
+// The nuclear option, two taps deep and honest about what it does.
+function FreshStart({ onChange }: { onChange: (s: GameState) => void }) {
+  const [arming, setArming] = useState(false);
+  return (
+    <div className="border-t pt-3" style={{ borderColor: 'var(--dust)' }}>
+      {arming ? (
+        <div>
+          <p className="text-xs" style={{ color: 'var(--chalk)' }}>
+            Everything goes: scores, streaks, the ledger, the lot. No getting it back.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => {
+                localStorage.clear();
+                onChange(freshState());
+                setArming(false);
+              }}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{ background: 'var(--care)', color: 'var(--board)' }}
+            >
+              Wipe it all
+            </button>
+            <button
+              onClick={() => setArming(false)}
+              className="rounded-lg border px-3 py-1.5 text-xs"
+              style={{ borderColor: 'var(--dust)' }}
+            >
+              Keep the board
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setArming(true)}
+          className="font-score text-[11px] underline-offset-2 hover:underline"
+          style={{ color: 'var(--chalk-dim)' }}
+        >
+          start the whole board fresh
+        </button>
+      )}
     </div>
   );
 }

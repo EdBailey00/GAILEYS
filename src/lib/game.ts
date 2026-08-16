@@ -19,6 +19,12 @@ export interface Habit {
   target: number;
   /** XP per tick (daily/multi/weekly) or per held day (streak). */
   xp: number;
+  /**
+   * Whose habit this is. Absent = shared, both players compete on it.
+   * Set = personal: only that player sees it and scores from it (Alfie's
+   * work-from-Ed's-room day is not on Ed's board).
+   */
+  owner?: 'p1' | 'p2';
   archived?: boolean;
 }
 
@@ -55,6 +61,22 @@ export interface WeekResult {
   p2: number;
 }
 
+/**
+ * A change to the shared board, waiting on the other brother's yes.
+ * Personal habits skip this; the shared game is nobody's to change alone.
+ */
+export interface Proposal {
+  id: string;
+  /** Who proposed it - the OTHER player accepts or rejects. */
+  by: Player['id'];
+  kind: 'add' | 'retire' | 'edit';
+  /** 'add': the habit as it would join. 'edit': the habit as it would become
+   *  (same id as the one it replaces). */
+  habit?: Habit;
+  /** kind 'retire': which existing habit to retire. */
+  habitId?: string;
+}
+
 export interface GameState {
   players: [Player, Player];
   habits: Habit[];
@@ -62,6 +84,8 @@ export interface GameState {
   streaks: StreakState[];
   /** Sealed results of past weeks - the bragging-rights ledger. */
   history: WeekResult[];
+  /** Shared-board changes awaiting the other player's yes. */
+  proposals: Proposal[];
 }
 
 // --- dates -------------------------------------------------------------------
@@ -153,6 +177,7 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
     }
     const habit = state.habits.find(h => h.id === c.habitId);
     if (!habit) continue;
+    if (habit.owner && habit.owner !== playerId) continue;
     // Tally counts are the thing being cut down - they never earn per tick.
     if (habit.kind !== 'tally') xp += habit.xp * c.count;
   }
@@ -160,6 +185,7 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
     if (s.playerId !== playerId) continue;
     const habit = state.habits.find(h => h.id === s.habitId);
     if (!habit || habit.kind !== 'streak' || habit.archived) continue;
+    if (habit.owner && habit.owner !== playerId) continue;
     // Days of this run that fall inside this week, up to today, each at the
     // rate the streak had reached on that day.
     for (const d of weekDates(monday)) {
@@ -173,6 +199,7 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
   // rewards the declaration, and unopened apps are not mistaken for clean days.
   for (const habit of state.habits) {
     if (habit.kind !== 'tally' || habit.archived) continue;
+    if (habit.owner && habit.owner !== playerId) continue;
     for (const d of weekDates(monday)) {
       if (d > todayKey) break;
       const log = state.completions.find(
