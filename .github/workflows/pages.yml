@@ -21,8 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          # 22 and not 20: the Capacitor CLI refuses to install on Node 20.
-          node-version: 22
+          # 24, matching the machine the lockfile is written on. Node 22 ships
+          # npm 10, which rejects an npm 11 lockfile as incomplete, and the
+          # Capacitor CLI will not install on Node 20 at all.
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run build
