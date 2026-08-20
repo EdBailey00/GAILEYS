@@ -8,7 +8,7 @@
 
 import { useState } from 'react';
 import type { Player } from '@/lib/game';
-import { claimPlayer } from '@/lib/remote';
+import { requestSeat } from '@/lib/remote';
 import { supabase } from '@/lib/supabase';
 
 const field =
@@ -124,20 +124,19 @@ export function SignIn() {
 
 export function ChooseBrother({
   players,
-  onClaimed,
+  onResult,
 }: {
   players: { id: Player['id']; name: string; colour: string }[];
-  onClaimed: (id: Player['id']) => void;
+  onResult: (status: 'claimed' | 'pending', id: Player['id']) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
 
-  const claim = async (id: Player['id']) => {
+  const ask = async (id: Player['id']) => {
     setBusy(true);
     setTrouble(null);
     try {
-      await claimPlayer(id);
-      onClaimed(id);
+      onResult(await requestSeat(id), id);
     } catch (e) {
       setTrouble(e instanceof Error ? e.message : 'That did not work');
     } finally {
@@ -151,7 +150,7 @@ export function ChooseBrother({
         {players.map(p => (
           <button
             key={p.id}
-            onClick={() => void claim(p.id)}
+            onClick={() => void ask(p.id)}
             disabled={busy}
             className="w-full rounded-xl py-4 text-2xl font-black uppercase tracking-wide disabled:opacity-40"
             style={{ background: p.colour, color: 'var(--board)' }}
@@ -161,14 +160,37 @@ export function ChooseBrother({
         ))}
       </div>
       <Trouble message={trouble} />
-      <button
-        onClick={() => void supabase.auth.signOut()}
-        className="font-score mt-4 w-full text-xs underline-offset-2 hover:underline"
-        style={{ color: 'var(--chalk-dim)' }}
-      >
-        sign out
-      </button>
+      <SignOutLink />
     </Frame>
+  );
+}
+
+/** Asked for a seat, waiting on the brother already playing to say yes. */
+export function Waiting({ name }: { name: string }) {
+  return (
+    <Frame
+      title="Hang on"
+      line={`Asked to join as ${name}. The board opens the moment your brother says yes.`}
+    >
+      <p className="text-sm leading-relaxed" style={{ color: 'var(--chalk-dim)' }}>
+        Give him a nudge. It shows up at the top of his board with a yes and a no,
+        and this screen lets you straight in as soon as he taps yes. You can leave
+        the app; it will be waiting.
+      </p>
+      <SignOutLink />
+    </Frame>
+  );
+}
+
+function SignOutLink() {
+  return (
+    <button
+      onClick={() => void supabase.auth.signOut()}
+      className="font-score mt-4 w-full text-xs underline-offset-2 hover:underline"
+      style={{ color: 'var(--chalk-dim)' }}
+    >
+      sign out
+    </button>
   );
 }
 

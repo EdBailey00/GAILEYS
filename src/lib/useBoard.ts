@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GameState, Player } from './game';
 import { emptyState, load, save, sealPastWeeks } from './store';
-import { myPlayer, pull, watch } from './remote';
+import { type SeatRequest, myPlayer, pull, pullSeatRequests, watch } from './remote';
 import { diff, flush, pending, queue } from './sync';
 import { supabase } from './supabase';
 
@@ -17,6 +17,7 @@ export type Stage =
   | 'loading' // still working out who this is
   | 'signed-out' // needs an email and a code
   | 'choosing' // signed in, has not said which brother he is
+  | 'waiting' // asked for a seat, needs the other brother's yes
   | 'ready'; // playing
 
 export interface Board {
@@ -27,6 +28,8 @@ export interface Board {
   waiting: number;
   /** Something went wrong talking to the server, in plain words. */
   trouble: string | null;
+  /** Anyone waiting to be let onto the board. */
+  seatRequests: SeatRequest[];
   update: (next: GameState) => void;
   refresh: () => Promise<void>;
   setMe: (id: Player['id']) => void;
@@ -39,6 +42,7 @@ export function useBoard(): Board {
   const [stage, setStage] = useState<Stage>('loading');
   const [waiting, setWaiting] = useState(0);
   const [trouble, setTrouble] = useState<string | null>(null);
+  const [seatRequests, setSeatRequests] = useState<SeatRequest[]>([]);
   const busy = useRef(false);
 
   /** Empty the outbox, then take the server's copy, then seal any dead weeks. */
@@ -54,6 +58,7 @@ export function useBoard(): Board {
       const board = sealPastWeeks(await pull());
       setState(board);
       save(board);
+      setSeatRequests(await pullSeatRequests());
       setTrouble(null);
     } catch (e) {
       setTrouble(e instanceof Error ? e.message : 'Cannot reach the board');
@@ -67,40 +72,48 @@ export function useBoard(): Board {
     setState(load());
   }, []);
 
-  // Who is this, and are they playing yet?
-  useEffect(() => {
-    let live = true;
-
-    const settle = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!live) return;
-      if (!data.session) {
-        setMe(null);
-        setStage('signed-out');
+  /** Who is this, and are they playing yet? */
+  const settle = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      setMe(null);
+      setStage('signed-out');
+      return;
+    }
+    try {
+      const player = await myPlayer();
+      setMe(player);
+      if (player) {
+        setStage('ready');
+        void refresh();
         return;
       }
-      try {
-        const player = await myPlayer();
-        if (!live) return;
-        setMe(player);
-        setStage(player ? 'ready' : 'choosing');
-        if (player) void refresh();
-      } catch (e) {
-        if (!live) return;
-        setTrouble(e instanceof Error ? e.message : 'Cannot reach the board');
-        setStage('choosing');
-      }
-    };
+      // No seat yet. Either he has asked and is waiting on a yes, or he has
+      // not asked at all. Without a seat the only request he can see is his
+      // own, so one row here means he is waiting.
+      const asked = await pullSeatRequests();
+      setStage(asked.length > 0 ? 'waiting' : 'choosing');
+    } catch (e) {
+      setTrouble(e instanceof Error ? e.message : 'Cannot reach the board');
+      setStage('choosing');
+    }
+  }, [refresh]);
 
+  useEffect(() => {
     void settle();
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       void settle();
     });
-    return () => {
-      live = false;
-      sub.subscription.unsubscribe();
-    };
-  }, [refresh]);
+    return () => sub.subscription.unsubscribe();
+  }, [settle]);
+
+  // Waiting on a yes: keep asking, so the moment he is let in the board opens
+  // by itself rather than needing the app restarted.
+  useEffect(() => {
+    if (stage !== 'waiting') return;
+    const tick = setInterval(() => void settle(), 5000);
+    return () => clearInterval(tick);
+  }, [stage, settle]);
 
   // The other phone's taps, as they happen. Plus the ordinary moments worth
   // checking: coming back to the app, and getting signal again.
@@ -130,5 +143,5 @@ export function useBoard(): Board {
     [state],
   );
 
-  return { state, me, stage, waiting, trouble, update, refresh, setMe, setStage };
+  return { state, me, stage, waiting, trouble, seatRequests, update, refresh, setMe, setStage };
 }

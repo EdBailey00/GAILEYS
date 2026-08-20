@@ -73,10 +73,45 @@ export async function myPlayer(): Promise<Player['id'] | null> {
   return (data as Player['id'] | null) ?? null;
 }
 
-/** Take a player, once, if the email is on the board and the seat is free. */
-export async function claimPlayer(playerId: Player['id']): Promise<void> {
-  const { error } = await supabase.rpc('claim_player', { p_player: playerId });
+/** Somebody signed in who is not on the board yet, asking for a seat. */
+export interface SeatRequest {
+  id: string;
+  email: string;
+  playerId: Player['id'];
+}
+
+/**
+ * Ask for a seat. 'claimed' means the board let you straight in; 'pending'
+ * means it is now waiting on the brother who is already playing.
+ */
+export async function requestSeat(playerId: Player['id']): Promise<'claimed' | 'pending'> {
+  const { data, error } = await supabase.rpc('request_seat', { p_player: playerId });
   if (error) throw error;
+  return data === 'claimed' ? 'claimed' : 'pending';
+}
+
+export async function approveSeat(id: string): Promise<void> {
+  const { error } = await supabase.rpc('approve_seat', { p_id: id });
+  if (error) throw error;
+}
+
+export async function declineSeat(id: string): Promise<void> {
+  const { error } = await supabase.rpc('decline_seat', { p_id: id });
+  if (error) throw error;
+}
+
+/** Who is waiting to be let in. Empty for anyone not on the board. */
+export async function pullSeatRequests(): Promise<SeatRequest[]> {
+  const { data, error } = await supabase
+    .from('seat_requests')
+    .select('id, email, player_id')
+    .order('created_at');
+  if (error) throw error;
+  return ((data ?? []) as { id: string; email: string; player_id: Player['id'] }[]).map(r => ({
+    id: r.id,
+    email: r.email,
+    playerId: r.player_id,
+  }));
 }
 
 /** The whole board. It is a few kilobytes, so there is nothing to page. */

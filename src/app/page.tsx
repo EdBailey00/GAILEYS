@@ -35,7 +35,8 @@ import {
   untickWeek,
 } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
-import { ChooseBrother, SignIn } from '@/components/Gate';
+import { ChooseBrother, SignIn, Waiting } from '@/components/Gate';
+import { approveSeat, declineSeat } from '@/lib/remote';
 import { Tracker } from '@/components/Tracker';
 import { Manage, SectionTitle } from '@/components/Manage';
 
@@ -78,13 +79,21 @@ export default function Page() {
     return (
       <ChooseBrother
         players={state.players.map(p => ({ id: p.id, name: p.name, colour: p.colour }))}
-        onClaimed={id => {
-          board.setMe(id);
-          board.setStage('ready');
-          void board.refresh();
+        onResult={(status, id) => {
+          if (status === 'claimed') {
+            board.setMe(id);
+            board.setStage('ready');
+            void board.refresh();
+          } else {
+            board.setStage('waiting');
+          }
         }}
       />
     );
+  }
+  if (board.stage === 'waiting') {
+    const asked = board.seatRequests[0];
+    return <Waiting name={state.players.find(p => p.id === asked?.playerId)?.name ?? 'a player'} />;
   }
 
   const who = viewing ?? board.me ?? 'p1';
@@ -215,6 +224,47 @@ export default function Page() {
           {level.into}/{level.needed}
         </span>
       </div>
+
+      {/* ---- Someone asking to join ------------------------------------------ */}
+      {board.seatRequests.length > 0 && (
+        <>
+          <SectionTitle>Asking to join</SectionTitle>
+          <div className="space-y-2">
+            {board.seatRequests.map(r => {
+              const seat = state.players.find(x => x.id === r.playerId);
+              return (
+                <div
+                  key={r.id}
+                  className="rounded-2xl border px-4 py-3"
+                  style={{ borderColor: seat?.colour ?? 'var(--dust)', background: 'var(--board-raised)' }}
+                >
+                  <div className="text-sm leading-snug">
+                    <span className="font-score">{r.email}</span> wants to be{' '}
+                    <span className="font-black uppercase">{seat?.name}</span>. Only say yes
+                    if you know that address.
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => void approveSeat(r.id).then(() => board.refresh())}
+                      className="rounded-lg px-4 py-1.5 text-xs font-bold"
+                      style={{ background: 'var(--score)', color: 'var(--board)' }}
+                    >
+                      That is him
+                    </button>
+                    <button
+                      onClick={() => void declineSeat(r.id).then(() => board.refresh())}
+                      className="rounded-lg border px-4 py-1.5 text-xs font-semibold"
+                      style={{ borderColor: 'var(--dust)', color: 'var(--chalk-dim)' }}
+                    >
+                      No idea who that is
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* ---- Changes waiting on this player's yes ---------------------------- */}
       {state.proposals.filter(p => p.by !== who).length > 0 && (
