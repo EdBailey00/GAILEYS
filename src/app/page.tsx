@@ -35,8 +35,7 @@ import {
   untickWeek,
 } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
-import { CannotStart, ChooseBrother, Waiting } from '@/components/Gate';
-import { approveSeat, declineSeat } from '@/lib/remote';
+import { ChooseBrother } from '@/components/Gate';
 import { Tracker } from '@/components/Tracker';
 import { Manage, SectionTitle } from '@/components/Manage';
 
@@ -72,31 +71,11 @@ export default function Page() {
   if (board.stage === 'loading') {
     return <main className="min-h-screen" />;
   }
-  if (board.stage === 'signed-out') {
-    return <CannotStart reason={board.trouble} />;
-  }
   if (board.stage === 'choosing') {
     return (
       <ChooseBrother
         players={state.players.map(p => ({ id: p.id, name: p.name, colour: p.colour }))}
-        onResult={(status, id) => {
-          if (status === 'claimed') {
-            board.setMe(id);
-            board.setStage('ready');
-            void board.refresh();
-          } else {
-            board.setStage('waiting');
-          }
-        }}
-      />
-    );
-  }
-  if (board.stage === 'waiting') {
-    const asked = board.seatRequests[0];
-    return (
-      <Waiting
-        name={state.players.find(p => p.id === asked?.playerId)?.name ?? 'a player'}
-        code={asked?.code ?? null}
+        onPick={board.setMe}
       />
     );
   }
@@ -229,56 +208,6 @@ export default function Page() {
           {level.into}/{level.needed}
         </span>
       </div>
-
-      {/* ---- Someone asking to join ------------------------------------------ */}
-      {board.seatRequests.length > 0 && (
-        <>
-          <SectionTitle>Asking to join</SectionTitle>
-          <div className="space-y-2">
-            {board.seatRequests.map(r => {
-              const seat = state.players.find(x => x.id === r.playerId);
-              return (
-                <div
-                  key={r.id}
-                  className="rounded-2xl border px-4 py-3"
-                  style={{ borderColor: seat?.colour ?? 'var(--dust)', background: 'var(--board-raised)' }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="font-score text-2xl font-black"
-                      style={{ letterSpacing: '0.12em', transform: 'rotate(-1.5deg)' }}
-                    >
-                      {r.code ?? '????'}
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm leading-snug">
-                      A phone showing this code wants to be{' '}
-                      <span className="font-black uppercase">{seat?.name}</span>. Check it
-                      matches what is on his screen.
-                      {r.email ? <span className="font-score"> ({r.email})</span> : null}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => void approveSeat(r.id).then(() => board.refresh())}
-                      className="rounded-lg px-4 py-1.5 text-xs font-bold"
-                      style={{ background: 'var(--score)', color: 'var(--board)' }}
-                    >
-                      That is him
-                    </button>
-                    <button
-                      onClick={() => void declineSeat(r.id).then(() => board.refresh())}
-                      className="rounded-lg border px-4 py-1.5 text-xs font-semibold"
-                      style={{ borderColor: 'var(--dust)', color: 'var(--chalk-dim)' }}
-                    >
-                      No idea who that is
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
 
       {/* ---- Changes waiting on this player's yes ---------------------------- */}
       {state.proposals.filter(p => p.by !== who).length > 0 && (
@@ -683,7 +612,16 @@ export default function Page() {
           {manage ? 'close settings' : 'players & habits'}
         </button>
       </div>
-      {manage && <Manage state={state} who={who} onChange={update} onRename={rename} />}
+      {manage && (
+        <Manage
+          state={state}
+          who={who}
+          me={board.me}
+          onChange={update}
+          onRename={rename}
+          onSetMe={board.setMe}
+        />
+      )}
 
       {/* Floating scores */}
       {floats.map(f => (

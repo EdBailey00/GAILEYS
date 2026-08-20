@@ -27,13 +27,18 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
 export function Manage({
   state,
   who,
+  me,
   onChange,
   onRename,
+  onSetMe,
 }: {
   state: GameState;
   who: Player['id'];
+  /** Which brother this phone belongs to. */
+  me: Player['id'] | null;
   onChange: (s: GameState) => void;
   onRename: (id: Player['id'], name: string) => void;
+  onSetMe: (id: Player['id']) => void;
 }) {
   const [name, setName] = useState('');
   const [detail, setDetail] = useState('');
@@ -119,6 +124,31 @@ export function Manage({
 
   return (
     <div className="mt-4 space-y-4 rounded-2xl border p-4" style={{ borderColor: 'var(--dust)' }}>
+      <div>
+        <div className="font-score mb-2 text-[11px] uppercase tracking-wider" style={{ color: 'var(--chalk-dim)' }}>
+          This phone is
+        </div>
+        <div className="flex overflow-hidden rounded-xl border" style={{ borderColor: 'var(--dust)' }}>
+          {state.players.map(p => (
+            <button
+              key={p.id}
+              onClick={() => onSetMe(p.id)}
+              className="flex-1 py-2.5 text-center text-sm font-black uppercase tracking-wide"
+              style={
+                me === p.id
+                  ? { background: p.colour, color: 'var(--board)' }
+                  : { background: 'transparent', color: 'var(--chalk-dim)' }
+              }
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+          Only this phone&apos;s own board can be ticked, so this is worth getting right.
+        </p>
+      </div>
+
       <div>
         <div className="font-score mb-2 text-[11px] uppercase tracking-wider" style={{ color: 'var(--chalk-dim)' }}>
           Players

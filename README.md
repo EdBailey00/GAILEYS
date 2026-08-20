@@ -14,12 +14,19 @@ on any phone, which is the route for an iPhone.
 
 ## One board, two phones
 
-Sign in once with your email and the six digit code that arrives. After that
-the app stays signed in, and both phones read and write the same board, live.
+There is no sign-in. Open it, tap your name once, and you are on the board.
+The phone remembers; both phones read and write the same board, live.
 
-The database decides who may write what, not the interface: you can look at
-your brother's board, but the only ticks you can make are your own. Tapping
-his gym is not a thing the server will accept, so the app does not offer it.
+You can look at your brother's board, but only your own has anything you can
+tap, so nobody fat-fingers a gym session onto the wrong side. Which brother a
+phone belongs to is a setting, not a password: this is a scoreboard for two
+people who share a kitchen and it is deliberately built as one.
+
+Which also means the board is open to anyone who has the address. That was a
+deliberate trade, made knowingly: an account and an emailed code to look at a
+scoreboard was more friction than the thing is worth. The row level security
+is still in the project, so turning identity back on later is adding a policy
+rather than a rebuild.
 
 It works with no signal. The app opens on the copy this phone last saw before
 it asks the server anything, changes go into an outbox, and the outbox empties
@@ -79,10 +86,8 @@ The database schema, its row level security and the seeded habit list live in
 the Supabase project; the migrations that built it are named `core_schema`,
 `row_level_security` and `seed_board`.
 
-The url and publishable key in `src/lib/supabase.ts` are not secrets. Any
-static build inlines them and this repo is public. What protects the board is
-the row level security: without an account on the allowlist, those two strings
-get you nothing.
+The url and publishable key in `src/lib/supabase.ts` are not secrets and are
+not treated as any. Any static build inlines them and this repo is public.
 
 ## Deployment
 
