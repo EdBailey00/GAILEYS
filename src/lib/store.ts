@@ -1,6 +1,11 @@
-// Device storage for the model. One JSON blob in localStorage, loaded once
-// and saved on every change. The whole game state goes through here so a
-// shared backend later is a swap of this file, not a rewrite of the app.
+// The board on this device.
+//
+// The shared board lives on the server now, but this file still matters: it
+// holds the last copy this phone saw, so the app opens instantly and keeps
+// working in a basement with no signal. Every function here is a pure change
+// to the state; what gets sent to the server is worked out by diffing the
+// before and after in sync.ts, which means none of the taps in the interface
+// need to know a server exists.
 
 import {
   type GameState,
@@ -14,129 +19,41 @@ import {
   weekXp,
 } from './game';
 
-const KEY = 'bragging-rights-v1';
+const KEY = 'bragging-rights-v2';
 
 let counter = 1;
 export const newId = () => `h${Date.now().toString(36)}${counter++}`;
 
-/** The starting habit list - the things the brothers actually named. */
-function seedHabits(): Habit[] {
-  return [
-    ...simpleHabits(),
-    { id: newId(), name: 'Ate 3 meals', emoji: '🍳', kind: 'multi', target: 3, xp: 5 },
-    { id: newId(), name: 'Ate good today', emoji: '🥦', kind: 'daily', target: 1, xp: 10 },
-    { id: newId(), name: 'Cooked dinner', emoji: '👨‍🍳', kind: 'daily', target: 1, xp: 15 },
-    { id: newId(), name: 'Dishes done', emoji: '🍽️', kind: 'daily', target: 1, xp: 10 },
-    { id: newId(), name: 'Washing done', emoji: '🧺', kind: 'weekly', target: 2, xp: 15 },
-    ...choreHabits(),
-    { id: newId(), name: 'Watered the plants', emoji: '🪴', kind: 'weekly', target: 2, xp: 10 },
-    { id: newId(), name: 'Gym', emoji: '🏋️', kind: 'weekly', target: 3, xp: 20 },
-    { id: newId(), name: '5km run', emoji: '🏃', kind: 'weekly', target: 1, xp: 25 },
-    { id: newId(), name: 'Climbing', emoji: '🧗', kind: 'weekly', target: 1, xp: 25 },
-    { id: newId(), name: 'Days without beer', emoji: '🍺', kind: 'streak', target: 1, xp: 10 },
-    { id: newId(), name: 'Days without drugs', emoji: '🚫', kind: 'streak', target: 1, xp: 15 },
-    { id: newId(), name: 'Ciggies', emoji: '🚬', kind: 'tally', target: 0, xp: 10 },
-    ...alfieHabits(),
-  ];
-}
-
-/** The simple things. Small points, every day, for both - they count most. */
-function simpleHabits(): Habit[] {
-  return [
-    { id: newId(), name: 'Drank water', emoji: '💧', kind: 'daily', target: 1, xp: 5 },
-    { id: newId(), name: 'Made the bed', emoji: '🛌', kind: 'daily', target: 1, xp: 5 },
-    { id: newId(), name: 'Got outside', emoji: '🌤️', kind: 'daily', target: 1, xp: 5 },
-  ];
-}
-
-/** Alfie's own board - only he sees these, only he scores them. */
-function alfieHabits(): Habit[] {
-  return [
-    { id: newId(), name: "Worked from Ed's room", emoji: '💻', kind: 'daily', target: 1, xp: 10, owner: 'p2' },
-    { id: newId(), name: 'Ate something', emoji: '🍞', kind: 'daily', target: 1, xp: 10, owner: 'p2' },
-  ];
-}
-
-/** The chores, each its own tick - six quick wins, not one vague blob. */
-function choreHabits(): Habit[] {
-  return [
-    { id: newId(), name: 'Hoovered', emoji: '🌀', kind: 'weekly', target: 1, xp: 10 },
-    { id: newId(), name: 'Bins out', emoji: '🗑️', kind: 'weekly', target: 1, xp: 5 },
-    { id: newId(), name: 'Bathroom cleaned', emoji: '🛁', kind: 'weekly', target: 1, xp: 15 },
-    { id: newId(), name: 'Kitchen wiped down', emoji: '🧽', kind: 'weekly', target: 2, xp: 10 },
-    { id: newId(), name: 'Bedsheets changed', emoji: '🛏️', kind: 'weekly', target: 1, xp: 10 },
-    { id: newId(), name: 'Floors mopped', emoji: '🧴', kind: 'weekly', target: 1, xp: 10 },
-  ];
-}
-
-export function freshState(): GameState {
-  const start = today();
-  const habits = seedHabits();
-  const streaks = habits
-    .filter(h => h.kind === 'streak')
-    .flatMap(h => (['p1', 'p2'] as const).map(playerId => ({
-      habitId: h.id,
-      playerId,
-      startedOn: start,
-      best: 0,
-    })));
+/**
+ * What the app shows before the first board arrives: the two names and
+ * nothing else. The habits are seeded once by the database, with readable ids,
+ * so both phones always mean the same habit by the same id.
+ */
+export function emptyState(): GameState {
   return {
     players: [
       { id: 'p1', name: 'ED', emoji: '', colour: '#FFB224' },
       { id: 'p2', name: 'ALFIE', emoji: '', colour: '#46C7F0' },
     ],
-    habits,
+    habits: [],
     completions: [],
-    streaks,
+    streaks: [],
     history: [],
     proposals: [],
   };
 }
 
 export function load(): GameState {
-  if (typeof window === 'undefined') return freshState();
+  if (typeof window === 'undefined') return emptyState();
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return freshState();
+    if (!raw) return emptyState();
     const parsed = JSON.parse(raw) as GameState;
-    if (!parsed.players || !parsed.habits) return freshState();
-    return sealPastWeeks(migrate(parsed));
+    if (!parsed.players || !parsed.habits) return emptyState();
+    return sealPastWeeks(parsed);
   } catch {
-    return freshState();
+    return emptyState();
   }
-}
-
-/**
- * Bring a board saved by an older build up to date. Only placeholder names
- * are touched - anything the brothers typed themselves stays theirs.
- */
-function migrate(state: GameState): GameState {
-  let next = state;
-  // Boards saved before the confirmation system have no proposals list.
-  if (!next.proposals) next = { ...next, proposals: [] };
-  // The first release seeded p2 as 'Bro' before Alfie was Alfie.
-  if (next.players[1].name === 'Bro' || next.players[1].name === 'ALFIE'.toLowerCase()) {
-    next = {
-      ...next,
-      players: [next.players[0], { ...next.players[1], name: 'ALFIE' }] as GameState['players'],
-    };
-  }
-  // Habits added after launch (the simple things, the separate chores,
-  // Alfie's personal board): create what is missing, matched by name so
-  // re-running never duplicates.
-  const have = new Set(next.habits.map(h => h.name.toLowerCase()));
-  const missing = [...simpleHabits(), ...choreHabits(), ...alfieHabits()].filter(
-    h => !have.has(h.name.toLowerCase()),
-  );
-  if (missing.length > 0) next = { ...next, habits: [...next.habits, ...missing] };
-  // The one vague chore blob the separates replace.
-  if (next.habits.some(h => h.name === 'Tidy / chores' && !h.archived)) {
-    next = {
-      ...next,
-      habits: next.habits.map(h => (h.name === 'Tidy / chores' ? { ...h, archived: true } : h)),
-    };
-  }
-  return next;
 }
 
 export function save(state: GameState): void {
@@ -148,7 +65,8 @@ export function save(state: GameState): void {
  * Seal any finished weeks into history on load, so the race resets each
  * Monday and past weeks become the permanent bragging-rights ledger.
  * Completion rows for sealed weeks stay (they are the record); only the
- * headline gets written once.
+ * headline gets written once. Both phones compute the same numbers from the
+ * same rows, so sealing on both is the same answer written twice.
  */
 export function sealPastWeeks(state: GameState): GameState {
   const thisMonday = weekOf(today());
@@ -172,7 +90,15 @@ export function sealPastWeeks(state: GameState): GameState {
   return { ...state, history };
 }
 
-/** Set a day's tick count for one player on one habit (upsert). */
+/**
+ * Set a day's tick count for one player on one habit (upsert).
+ * The count is absolute, never a delta, which is what makes it safe to send
+ * again once the signal comes back.
+ *
+ * Changing the count clears any hand-entered spend for that day: the number of
+ * units changed, so the habit's usual price applies again. Use setSpend to say
+ * what was actually paid.
+ */
 export function setTicks(
   state: GameState,
   habitId: string,
@@ -188,6 +114,26 @@ export function setTicks(
       ? rest
       : [...rest, { habitId, playerId, date, count: Math.max(0, count) }];
   return { ...state, completions };
+}
+
+/** Record what a day actually cost, when it was not the usual price. */
+export function setSpend(
+  state: GameState,
+  habitId: string,
+  playerId: Player['id'],
+  date: string,
+  pence: number | null,
+): GameState {
+  return {
+    ...state,
+    completions: state.completions.map(c =>
+      c.habitId === habitId && c.playerId === playerId && c.date === date
+        ? pence === null
+          ? { habitId: c.habitId, playerId: c.playerId, date: c.date, count: c.count }
+          : { ...c, spentPence: Math.max(0, Math.round(pence)) }
+        : c,
+    ),
+  };
 }
 
 function isTally(state: GameState, habitId: string): boolean {
@@ -287,4 +233,18 @@ export function resetStreak(state: GameState, habitId: string, playerId: Player[
     return { ...s, startedOn: t, best: Math.max(s.best, run) };
   });
   return { ...state, streaks };
+}
+
+/** Set the price of one unit of a habit that costs money, in pence. */
+export function setUnitCost(state: GameState, habitId: string, pence: number | null): GameState {
+  return {
+    ...state,
+    habits: state.habits.map(h => {
+      if (h.id !== habitId) return h;
+      const next: Habit = { ...h };
+      if (pence === null) delete next.unitCost;
+      else next.unitCost = Math.max(0, Math.round(pence));
+      return next;
+    }),
+  };
 }
