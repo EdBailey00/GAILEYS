@@ -76,8 +76,16 @@ export function useBoard(): Board {
   const settle = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
-      setMe(null);
-      setStage('signed-out');
+      // No signing in as such. The phone takes an anonymous identity, which
+      // is real and distinct as far as the database is concerned, so a player
+      // still cannot score for his brother. Nothing to type, nothing to wait
+      // for. The auth listener runs this again once the session lands.
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        setMe(null);
+        setTrouble(error.message);
+        setStage('signed-out');
+      }
       return;
     }
     try {

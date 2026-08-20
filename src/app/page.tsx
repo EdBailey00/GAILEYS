@@ -35,7 +35,7 @@ import {
   untickWeek,
 } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
-import { ChooseBrother, SignIn, Waiting } from '@/components/Gate';
+import { CannotStart, ChooseBrother, Waiting } from '@/components/Gate';
 import { approveSeat, declineSeat } from '@/lib/remote';
 import { Tracker } from '@/components/Tracker';
 import { Manage, SectionTitle } from '@/components/Manage';
@@ -73,7 +73,7 @@ export default function Page() {
     return <main className="min-h-screen" />;
   }
   if (board.stage === 'signed-out') {
-    return <SignIn />;
+    return <CannotStart reason={board.trouble} />;
   }
   if (board.stage === 'choosing') {
     return (
@@ -93,7 +93,12 @@ export default function Page() {
   }
   if (board.stage === 'waiting') {
     const asked = board.seatRequests[0];
-    return <Waiting name={state.players.find(p => p.id === asked?.playerId)?.name ?? 'a player'} />;
+    return (
+      <Waiting
+        name={state.players.find(p => p.id === asked?.playerId)?.name ?? 'a player'}
+        code={asked?.code ?? null}
+      />
+    );
   }
 
   const who = viewing ?? board.me ?? 'p1';
@@ -238,10 +243,19 @@ export default function Page() {
                   className="rounded-2xl border px-4 py-3"
                   style={{ borderColor: seat?.colour ?? 'var(--dust)', background: 'var(--board-raised)' }}
                 >
-                  <div className="text-sm leading-snug">
-                    <span className="font-score">{r.email}</span> wants to be{' '}
-                    <span className="font-black uppercase">{seat?.name}</span>. Only say yes
-                    if you know that address.
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="font-score text-2xl font-black"
+                      style={{ letterSpacing: '0.12em', transform: 'rotate(-1.5deg)' }}
+                    >
+                      {r.code ?? '????'}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm leading-snug">
+                      A phone showing this code wants to be{' '}
+                      <span className="font-black uppercase">{seat?.name}</span>. Check it
+                      matches what is on his screen.
+                      {r.email ? <span className="font-score"> ({r.email})</span> : null}
+                    </span>
                   </div>
                   <div className="mt-2 flex gap-2">
                     <button

@@ -76,7 +76,10 @@ export async function myPlayer(): Promise<Player['id'] | null> {
 /** Somebody signed in who is not on the board yet, asking for a seat. */
 export interface SeatRequest {
   id: string;
-  email: string;
+  /** Null when the phone signed in without an email, which is the usual case. */
+  email: string | null;
+  /** Four characters shown on both screens, so the yes is not a guess. */
+  code: string | null;
   playerId: Player['id'];
 }
 
@@ -104,14 +107,12 @@ export async function declineSeat(id: string): Promise<void> {
 export async function pullSeatRequests(): Promise<SeatRequest[]> {
   const { data, error } = await supabase
     .from('seat_requests')
-    .select('id, email, player_id')
+    .select('id, email, code, player_id')
     .order('created_at');
   if (error) throw error;
-  return ((data ?? []) as { id: string; email: string; player_id: Player['id'] }[]).map(r => ({
-    id: r.id,
-    email: r.email,
-    playerId: r.player_id,
-  }));
+  return (
+    (data ?? []) as { id: string; email: string | null; code: string | null; player_id: Player['id'] }[]
+  ).map(r => ({ id: r.id, email: r.email, code: r.code, playerId: r.player_id }));
 }
 
 /** The whole board. It is a few kilobytes, so there is nothing to page. */

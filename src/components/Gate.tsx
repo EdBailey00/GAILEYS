@@ -1,126 +1,16 @@
 'use client';
 
-// Getting in. An email, a six digit code, and which brother you are.
+// Getting in, with nothing to type.
 //
-// A code typed into the app rather than a link followed in a browser, which
-// is what makes the same screen work inside the Android app with no deep-link
-// handling. You do this once.
+// There is no sign-in screen any more. The phone takes an anonymous identity
+// the moment the app opens, which the database treats as a real and distinct
+// person, so a player still cannot score for his brother. All that is left is
+// saying which brother you are.
 
 import { useState } from 'react';
 import type { Player } from '@/lib/game';
 import { requestSeat } from '@/lib/remote';
 import { supabase } from '@/lib/supabase';
-
-const field =
-  'w-full rounded-xl border bg-transparent px-4 py-3 text-base outline-none focus:border-current';
-
-export function SignIn() {
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [trouble, setTrouble] = useState<string | null>(null);
-
-  const sendCode = async () => {
-    setBusy(true);
-    setTrouble(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: { shouldCreateUser: true },
-    });
-    setBusy(false);
-    if (error) setTrouble(error.message);
-    else setSent(true);
-  };
-
-  const verify = async () => {
-    setBusy(true);
-    setTrouble(null);
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: code.trim(),
-      type: 'email',
-    });
-    setBusy(false);
-    if (error) setTrouble(error.message);
-    // No success branch: the session lands and useBoard picks it up.
-  };
-
-  return (
-    <Frame title="Bragging Rights" line="The Bailey brothers' scoreboard.">
-      {!sent ? (
-        <>
-          <label className="font-score block text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--chalk-dim)' }}>
-            Your email
-          </label>
-          <input
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && email.includes('@')) void sendCode();
-            }}
-            placeholder="you@example.com"
-            className={`${field} mt-2`}
-            style={{ borderColor: 'var(--dust)', color: 'var(--chalk)' }}
-          />
-          <button
-            onClick={() => void sendCode()}
-            disabled={busy || !email.includes('@')}
-            className="mt-3 w-full rounded-xl py-3 text-sm font-black uppercase tracking-wide disabled:opacity-40"
-            style={{ background: 'var(--p1)', color: 'var(--board)' }}
-          >
-            {busy ? 'Sending' : 'Send me a code'}
-          </button>
-          <p className="mt-3 text-xs leading-snug" style={{ color: 'var(--chalk-dim)' }}>
-            You do this once. The app stays signed in after that, on this phone.
-          </p>
-        </>
-      ) : (
-        <>
-          <label className="font-score block text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--chalk-dim)' }}>
-            The code sent to {email}
-          </label>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            value={code}
-            onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && code.length === 6) void verify();
-            }}
-            placeholder="000000"
-            className={`${field} font-score mt-2 text-center text-2xl font-black`}
-            style={{ borderColor: 'var(--dust)', color: 'var(--chalk)', letterSpacing: '0.4em' }}
-          />
-          <button
-            onClick={() => void verify()}
-            disabled={busy || code.length !== 6}
-            className="mt-3 w-full rounded-xl py-3 text-sm font-black uppercase tracking-wide disabled:opacity-40"
-            style={{ background: 'var(--p1)', color: 'var(--board)' }}
-          >
-            {busy ? 'Checking' : 'Let me in'}
-          </button>
-          <button
-            onClick={() => {
-              setSent(false);
-              setCode('');
-              setTrouble(null);
-            }}
-            className="font-score mt-3 w-full text-xs underline-offset-2 hover:underline"
-            style={{ color: 'var(--chalk-dim)' }}
-          >
-            wrong email? start again
-          </button>
-        </>
-      )}
-      <Trouble message={trouble} />
-    </Frame>
-  );
-}
 
 export function ChooseBrother({
   players,
@@ -145,14 +35,14 @@ export function ChooseBrother({
   };
 
   return (
-    <Frame title="Which one are you?" line="Pick once. It is how the board knows whose gym is whose.">
+    <Frame title="Which one are you?" line="Tap your name. That is the whole sign-in.">
       <div className="mt-1 space-y-3">
         {players.map(p => (
           <button
             key={p.id}
             onClick={() => void ask(p.id)}
             disabled={busy}
-            className="w-full rounded-xl py-4 text-2xl font-black uppercase tracking-wide disabled:opacity-40"
+            className="w-full rounded-xl py-5 text-2xl font-black uppercase tracking-wide disabled:opacity-40"
             style={{ background: p.colour, color: 'var(--board)' }}
           >
             {p.name}
@@ -160,36 +50,81 @@ export function ChooseBrother({
         ))}
       </div>
       <Trouble message={trouble} />
-      <SignOutLink />
-    </Frame>
-  );
-}
-
-/** Asked for a seat, waiting on the brother already playing to say yes. */
-export function Waiting({ name }: { name: string }) {
-  return (
-    <Frame
-      title="Hang on"
-      line={`Asked to join as ${name}. The board opens the moment your brother says yes.`}
-    >
-      <p className="text-sm leading-relaxed" style={{ color: 'var(--chalk-dim)' }}>
-        Give him a nudge. It shows up at the top of his board with a yes and a no,
-        and this screen lets you straight in as soon as he taps yes. You can leave
-        the app; it will be waiting.
+      <p className="mt-4 text-xs leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+        This phone stays yours. If your brother is already playing, he gets a yes
+        or no first.
       </p>
-      <SignOutLink />
     </Frame>
   );
 }
 
-function SignOutLink() {
+/**
+ * Asked for a seat, waiting on the brother already playing to say yes. The
+ * code is the point: with no email on the request, it is how he knows the
+ * phone asking is yours and not somebody who found the link.
+ */
+export function Waiting({ name, code }: { name: string; code: string | null }) {
+  return (
+    <Frame title="Hang on" line={`Asked to join as ${name}.`}>
+      {code && (
+        <div className="rounded-2xl border px-4 py-5 text-center" style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}>
+          <div className="font-score text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--chalk-dim)' }}>
+            Read him this
+          </div>
+          <div
+            className="font-score mt-2 text-5xl font-black"
+            style={{ letterSpacing: '0.15em', transform: 'rotate(-1.5deg)' }}
+          >
+            {code}
+          </div>
+        </div>
+      )}
+      <p className="mt-5 text-sm leading-relaxed" style={{ color: 'var(--chalk-dim)' }}>
+        Your brother sees this at the top of his board with the same four
+        characters next to it. He taps yes and you are in, on this screen, without
+        touching anything. You can put the phone down.
+      </p>
+      <SignOutLink label="start again" />
+    </Frame>
+  );
+}
+
+/** Only seen if the board cannot hand this phone an identity at all. */
+export function CannotStart({ reason }: { reason: string | null }) {
+  return (
+    <Frame title="Cannot open the board" line="This phone could not get an identity from the server.">
+      <p className="text-sm leading-relaxed" style={{ color: 'var(--chalk-dim)' }}>
+        Anonymous sign-ins are switched off for this project. Turn them on in
+        Supabase under Authentication, Sign In and Providers, and this screen
+        goes away.
+      </p>
+      {reason && (
+        <p className="font-score mt-3 text-xs leading-snug" style={{ color: 'var(--care)' }}>
+          {reason}
+        </p>
+      )}
+      <button
+        onClick={() => window.location.reload()}
+        className="mt-5 w-full rounded-xl py-3 text-sm font-black uppercase tracking-wide"
+        style={{ background: 'var(--p1)', color: 'var(--board)' }}
+      >
+        Try again
+      </button>
+    </Frame>
+  );
+}
+
+function SignOutLink({ label = 'sign out' }: { label?: string }) {
   return (
     <button
-      onClick={() => void supabase.auth.signOut()}
-      className="font-score mt-4 w-full text-xs underline-offset-2 hover:underline"
+      onClick={() => {
+        localStorage.clear();
+        void supabase.auth.signOut();
+      }}
+      className="font-score mt-6 w-full text-xs underline-offset-2 hover:underline"
       style={{ color: 'var(--chalk-dim)' }}
     >
-      sign out
+      {label}
     </button>
   );
 }
