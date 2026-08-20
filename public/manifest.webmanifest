@@ -2,14 +2,14 @@
   "name": "Bragging Rights",
   "short_name": "Brag",
   "description": "The brothers' scoreboard: meals, chores, miles and hard-won days, all worth points.",
-  "start_url": "/GAILEYS/",
-  "scope": "/GAILEYS/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#1c1917",
   "theme_color": "#1c1917",
   "icons": [
-    { "src": "/GAILEYS/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/GAILEYS/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/GAILEYS/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

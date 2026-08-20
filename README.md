@@ -3,38 +3,89 @@
 The Bailey brothers' scoreboard. Meals, chores, miles and hard-won days, all
 worth points; whoever's ahead on Sunday night gets the bragging rights.
 
-**Play it:** https://edbailey00.github.io/GAILEYS/
+**On Android:** install the app from the latest release, at
+https://github.com/EdBailey00/GAILEYS/releases/latest. Open that page on the
+phone, tap the `.apk`, and allow installs from that source when Android asks.
+Every push to `main` builds a new one.
 
-On a phone, open that link and add it to the home screen (Android: browser
-menu, "Install app" / "Add to Home screen". iPhone: Share, "Add to Home
-Screen"). It opens full-screen like an app and works offline.
+**In a browser:** https://edbailey00.github.io/GAILEYS/ - the same app, and
+still installable from the browser menu ("Install app" / "Add to Home Screen")
+on any phone, which is the route for an iPhone.
+
+## One board, two phones
+
+Sign in once with your email and the six digit code that arrives. After that
+the app stays signed in, and both phones read and write the same board, live.
+
+The database decides who may write what, not the interface: you can look at
+your brother's board, but the only ticks you can make are your own. Tapping
+his gym is not a thing the server will accept, so the app does not offer it.
+
+It works with no signal. The app opens on the copy this phone last saw before
+it asks the server anything, changes go into an outbox, and the outbox empties
+when the signal comes back. Every change carries an absolute value ("gym is 2
+this Tuesday", never "+1"), which is what makes replaying it after a tunnel or
+a flat battery safe rather than a guess.
 
 ## How it scores
 
-- **Today**: daily ticks (dishes, cooked dinner) and multi-ticks (3 meals).
+- **Today**: daily ticks (2L of water, dishes) and multi-ticks (3 meals).
 - **This week**: targets per week (gym x3, 5km, climbing) - Monday reset.
-- **Challenges**: three bonus challenges a week, drawn from a pool - both
-  phones independently draw the same three.
-- **The hard-won days**: count-up streaks (days without beer / drugs). Worth
-  more the longer they run: x1.5 after a week, x2 after a month, x3 after a
-  hundred days. Resetting is honest and keeps your best run.
-- **Cutting down**: tallies for things being cut (ciggies). Logging never
-  costs points; a declared clean day earns them.
+- **Challenges**: three bonus challenges a week, drawn from a pool.
+- **The hard-won days**: count-up streaks, worth more the longer they run:
+  x1.5 after a week, x2 after a month, x3 after a hundred days. Resetting is
+  honest and keeps your best run.
+- **Cutting down**: the tally card. Logging a use never costs points and a
+  declared clean day scores, on the same escalating scale, so a clean day on
+  day 40 is worth more than one on day 4.
 - Sealed weeks land in the ledger at the bottom - the permanent record.
 
-## The honest limitation
+Every habit is definitive. "Drink 2L water", not "drank water": each one names
+a number or an unambiguous finish line, with the detail underneath, so there is
+never an argument about whether it counted.
 
-Scores live on each phone (no server). Two phones means two boards - compare
-across the kitchen table. Live sync is the designed next step: the game logic
-is already pure (`src/lib/game.ts`) with storage isolated in
-`src/lib/store.ts`, so a shared backend swaps in behind one file.
+### The tracker
+
+A tally habit given a price becomes a proper tracker: days clean, the longest
+clean run ever held, and what it has cost this week, this month and all time.
+Every one of those numbers is read from the same log, so there is nothing to
+keep in step and nothing to remember to press. Days clean comes from the last
+use in the log, and the best run from the gaps between uses, which means it
+cannot be fiddled and cannot be lost.
 
 ## Working on it
 
 ```bash
 npm install
-npm run dev
+npm run dev      # http://localhost:3000
+npm test         # the game rules and the sync diff
 ```
 
-Static export deploys to GitHub Pages on every push to main
-(`.github/workflows/pages.yml`).
+Note the dev server is at the root now, not `/GAILEYS/`. The base path is set
+by `NEXT_PUBLIC_BASE_PATH`, which the Pages workflow sets to `/GAILEYS` and the
+Android build leaves unset.
+
+The layers, smallest first:
+
+| File | Job |
+|---|---|
+| `src/lib/game.ts` | the rules: XP, weeks, streaks, clean runs, money. Pure |
+| `src/lib/store.ts` | this phone's copy, and every change as a pure function |
+| `src/lib/sync.ts` | what changed, and the outbox that survives no signal |
+| `src/lib/remote.ts` | rows in, rows out. The only file that knows SQL exists |
+| `src/lib/useBoard.ts` | ties them together for the interface |
+
+The database schema, its row level security and the seeded habit list live in
+the Supabase project; the migrations that built it are named `core_schema`,
+`row_level_security` and `seed_board`.
+
+The url and publishable key in `src/lib/supabase.ts` are not secrets. Any
+static build inlines them and this repo is public. What protects the board is
+the row level security: without an account on the allowlist, those two strings
+get you nothing.
+
+## Deployment
+
+- `.github/workflows/pages.yml` - the browser version, on every push to main.
+- `.github/workflows/android.yml` - the apk, on every push to main, published
+  as a release.

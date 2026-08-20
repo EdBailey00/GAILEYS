@@ -6,7 +6,7 @@
 // two colours pushing against each other, the meeting point is who is
 // winning the week. Everything below exists to shove it.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   type GameState,
   type Habit,
@@ -28,17 +28,18 @@ import {
 } from '@/lib/game';
 import {
   acceptProposal,
-  freshState,
-  load,
   newId,
   propose,
   rejectProposal,
   resetStreak,
-  save,
   setTicks,
   unclaimChallenge,
   untickWeek,
 } from '@/lib/store';
+import { useBoard } from '@/lib/useBoard';
+import { supabase } from '@/lib/supabase';
+import { ChooseBrother, SignIn } from '@/components/Gate';
+import { Tracker } from '@/components/Tracker';
 
 // A floating "+10" that rises off whatever was tapped.
 interface FloatScore {
@@ -49,37 +50,49 @@ interface FloatScore {
 }
 
 export default function Page() {
-  const [state, setState] = useState<GameState | null>(null);
-  const [who, setWho] = useState<Player['id']>('p1');
+  const board = useBoard();
+  const { state, update } = board;
+  // Which board is on screen. It starts on yours and you can look at your
+  // brother's, but only your own has anything you can tap.
+  const [viewing, setViewing] = useState<Player['id'] | null>(null);
   const [manage, setManage] = useState(false);
   const [confirmReset, setConfirmReset] = useState<string | null>(null);
   const [floats, setFloats] = useState<FloatScore[]>([]);
   const [stamped, setStamped] = useState<string | null>(null);
   const floatId = useRef(1);
 
-  useEffect(() => {
-    setState(load());
-  }, []);
-
-  const update = (next: GameState) => {
-    setState(next);
-    save(next);
-  };
-
   const t = today();
   const monday = weekOf(t);
 
   const scores = useMemo(() => {
-    if (!state) return null;
     const p1 = weekXp(state, 'p1', monday, t);
     const p2 = weekXp(state, 'p2', monday, t);
     return { p1, p2 };
   }, [state, monday, t]);
 
-  if (!state || !scores) {
+  if (board.stage === 'loading') {
     return <main className="min-h-screen" />;
   }
+  if (board.stage === 'signed-out') {
+    return <SignIn />;
+  }
+  if (board.stage === 'choosing') {
+    return (
+      <ChooseBrother
+        players={state.players.map(p => ({ id: p.id, name: p.name, colour: p.colour }))}
+        onClaimed={id => {
+          board.setMe(id);
+          board.setStage('ready');
+          void board.refresh();
+        }}
+      />
+    );
+  }
 
+  const who = viewing ?? board.me ?? 'p1';
+  // Scoring for your brother is not a thing the database will accept, so the
+  // interface does not offer it either.
+  const canTick = who === board.me;
   const [p1, p2] = state.players;
   const me = state.players.find(p => p.id === who)!;
   const share = scores.p1 + scores.p2 === 0 ? 0.5 : scores.p1 / (scores.p1 + scores.p2);
@@ -111,6 +124,7 @@ export default function Page() {
   };
 
   const tick = (e: React.MouseEvent, habit: Habit) => {
+    if (!canTick) return;
     const now = ticksOn(state, habit.id, who, t);
     const cap = habit.kind === 'multi' ? habit.target : habit.kind === 'daily' ? 1 : Infinity;
     if (habit.kind === 'daily' && now >= 1) {
@@ -124,21 +138,10 @@ export default function Page() {
   };
 
   const weeklyTick = (e: React.MouseEvent, habit: Habit) => {
+    if (!canTick) return;
     update(setTicks(state, habit.id, who, t, ticksOn(state, habit.id, who, t) + 1));
     stamp(habit.id);
     pop(e, `+${habit.xp}`);
-  };
-
-  const tallyAdd = (habit: Habit, n: number) => {
-    const now = ticksOn(state, habit.id, who, t);
-    update(setTicks(state, habit.id, who, t, Math.max(0, now + n)));
-    stamp(habit.id);
-  };
-
-  const declareClean = (e: React.MouseEvent, habit: Habit) => {
-    update(setTicks(state, habit.id, who, t, 0));
-    stamp(habit.id);
-    pop(e, `+${habit.xp} clean`);
   };
 
   const rename = (playerId: Player['id'], name: string) => {
@@ -189,7 +192,7 @@ export default function Page() {
         {state.players.map(p => (
           <button
             key={p.id}
-            onClick={() => setWho(p.id)}
+            onClick={() => setViewing(p.id)}
             className="flex-1 py-3 text-center text-lg font-black uppercase tracking-wide transition-colors"
             style={
               who === p.id
@@ -303,6 +306,11 @@ export default function Page() {
                   </span>
                 )}
               </div>
+              {habit.detail && (
+                <div className="mt-0.5 text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+                  {habit.detail}
+                </div>
+              )}
               {habit.kind === 'multi' ? (
                 <div className="mt-2 flex gap-1">
                   {Array.from({ length: habit.target }, (_, i) => (
@@ -367,6 +375,11 @@ export default function Page() {
                     </span>
                   )}
                 </span>
+                {habit.detail && (
+                  <span className="mt-0.5 block text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+                    {habit.detail}
+                  </span>
+                )}
                 <span className="mt-1.5 flex gap-1">
                   {Array.from({ length: Math.max(habit.target, mine) }, (_, i) => (
                     <span
@@ -414,6 +427,7 @@ export default function Page() {
             <button
               key={ch.id}
               onClick={e => {
+                if (!canTick) return;
                 if (mineDone) {
                   // Claimed by mistake: taking it back is one tap too.
                   update(unclaimChallenge(state, challengeKey(ch.id), who, monday));
@@ -531,71 +545,20 @@ export default function Page() {
         <>
           <SectionTitle>Cutting down</SectionTitle>
           <div className="space-y-2">
-            {tallies.map(habit => {
-              const mine = ticksOn(state, habit.id, who, t);
-              const logged = state.completions.some(
-                c => c.habitId === habit.id && c.playerId === who && c.date === t,
-              );
-              const week = ticksInWeek(state, habit.id, who, monday);
-              const lastMonday = new Date(monday + 'T12:00:00');
-              lastMonday.setDate(lastMonday.getDate() - 7);
-              const lastKey = `${lastMonday.getFullYear()}-${String(lastMonday.getMonth() + 1).padStart(2, '0')}-${String(lastMonday.getDate()).padStart(2, '0')}`;
-              const lastWeek = ticksInWeek(state, habit.id, who, lastKey);
-              const otherWeek = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
-              return (
-                <div
-                  key={habit.id}
-                  className={`rounded-2xl border px-4 py-3 ${stamped === habit.id ? 'stamp' : ''}`}
-                  style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{habit.emoji}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold leading-tight">{habit.name}</div>
-                      <div className="font-score mt-0.5 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-                        {week} this week{lastWeek > 0 ? ` · ${lastWeek} last week${week < lastWeek ? ' ↓' : ''}` : ''}
-                        {!habit.owner && ` · ${state.players.find(p => p.id !== who)!.name}: ${otherWeek}`}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => tallyAdd(habit, -1)}
-                        aria-label={`One less ${habit.name}`}
-                        className="h-9 w-9 rounded-full border text-lg font-bold"
-                        style={{ borderColor: 'var(--dust)' }}
-                      >
-                        −
-                      </button>
-                      <span className="font-score w-8 text-center text-2xl font-black" style={{ transform: 'rotate(-1.5deg)' }}>
-                        {logged ? mine : '·'}
-                      </span>
-                      <button
-                        onClick={() => tallyAdd(habit, 1)}
-                        aria-label={`One more ${habit.name}`}
-                        className="h-9 w-9 rounded-full border text-lg font-bold"
-                        style={{ borderColor: 'var(--dust)' }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                  {!logged && (
-                    <button
-                      onClick={e => declareClean(e, habit)}
-                      className="font-score mt-2 rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
-                      style={{ borderColor: 'var(--score)', color: 'var(--score)' }}
-                    >
-                      none today · +{habit.xp}
-                    </button>
-                  )}
-                  {logged && mine === 0 && (
-                    <div className="font-score mt-2 text-[11px]" style={{ color: 'var(--score)' }}>
-                      clean day banked · +{habit.xp}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {tallies.map(habit => (
+              <Tracker
+                key={habit.id}
+                state={state}
+                habit={habit}
+                who={who}
+                canTick={canTick}
+                today={t}
+                monday={monday}
+                onChange={update}
+                onPop={pop}
+                stamped={stamped}
+              />
+            ))}
           </div>
         </>
       )}
@@ -628,6 +591,25 @@ export default function Page() {
           </div>
         </>
       )}
+
+      {/* ---- Where things stand ---------------------------------------------- */}
+      <div className="mt-6 space-y-1 text-center">
+        {!canTick && (
+          <p className="text-xs" style={{ color: 'var(--chalk-dim)' }}>
+            You are looking at {me.name}&apos;s board. Tap your own name to score.
+          </p>
+        )}
+        {board.waiting > 0 && (
+          <p className="font-score text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
+            {board.waiting} change{board.waiting === 1 ? '' : 's'} waiting for signal
+          </p>
+        )}
+        {board.trouble && (
+          <p className="font-score text-[11px]" style={{ color: 'var(--care)' }}>
+            {board.trouble}
+          </p>
+        )}
+      </div>
 
       {/* ---- Manage ---------------------------------------------------------- */}
       <div className="mt-8 text-center">
@@ -992,39 +974,41 @@ function Manage({
         )}
       </div>
 
-      <FreshStart onChange={onChange} />
+      <SignOut />
     </div>
   );
 }
 
-// The nuclear option, two taps deep and honest about what it does.
-function FreshStart({ onChange }: { onChange: (s: GameState) => void }) {
+// Leaving this phone. The board lives on the server now, so this is about the
+// device and not about the game: nothing is lost, and signing back in brings
+// the whole board down again.
+function SignOut() {
   const [arming, setArming] = useState(false);
   return (
     <div className="border-t pt-3" style={{ borderColor: 'var(--dust)' }}>
       {arming ? (
         <div>
           <p className="text-xs" style={{ color: 'var(--chalk)' }}>
-            Everything goes: scores, streaks, the ledger, the lot. No getting it back.
+            This phone forgets you. The board keeps everything, and signing back in
+            with your email brings it all back.
           </p>
           <div className="mt-2 flex gap-2">
             <button
               onClick={() => {
                 localStorage.clear();
-                onChange(freshState());
-                setArming(false);
+                void supabase.auth.signOut();
               }}
               className="rounded-lg px-3 py-1.5 text-xs font-semibold"
               style={{ background: 'var(--care)', color: 'var(--board)' }}
             >
-              Wipe it all
+              Sign out
             </button>
             <button
               onClick={() => setArming(false)}
               className="rounded-lg border px-3 py-1.5 text-xs"
               style={{ borderColor: 'var(--dust)' }}
             >
-              Keep the board
+              Stay signed in
             </button>
           </div>
         </div>
@@ -1034,7 +1018,7 @@ function FreshStart({ onChange }: { onChange: (s: GameState) => void }) {
           className="font-score text-[11px] underline-offset-2 hover:underline"
           style={{ color: 'var(--chalk-dim)' }}
         >
-          start the whole board fresh
+          sign out of this phone
         </button>
       )}
     </div>

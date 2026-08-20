@@ -13,6 +13,12 @@ export type HabitKind =
 export interface Habit {
   id: string;
   name: string;
+  /**
+   * The finish line, shown small under the name. Every habit is definitive:
+   * it names a number or an unambiguous end, so there is never an argument
+   * about whether it counted. "Drink 2L water", not "drank water".
+   */
+  detail?: string;
   emoji: string;
   kind: HabitKind;
   /** multi: ticks per day. weekly: times per week. Others ignore it. */
@@ -25,6 +31,11 @@ export interface Habit {
    * work-from-Ed's-room day is not on Ed's board).
    */
   owner?: 'p1' | 'p2';
+  /**
+   * Tally habits that cost money: the price of one unit, in pence. Set it and
+   * the habit counts what it has cost as well as how often.
+   */
+  unitCost?: number;
   archived?: boolean;
 }
 
@@ -42,6 +53,8 @@ export interface Completion {
   playerId: Player['id'];
   date: string;
   count: number;
+  /** What was actually spent that day, when it differs from count x unitCost. */
+  spentPence?: number;
 }
 
 /** A running count-up streak. Reset = new startedOn (history keeps the best). */
@@ -145,6 +158,111 @@ export function streakFor(state: GameState, habitId: string, playerId: Player['i
   return state.streaks.find(s => s.habitId === habitId && s.playerId === playerId);
 }
 
+// --- cutting down: clean runs and what it costs --------------------------------
+//
+// A tally habit is the honest record of something you are cutting down. Every
+// number below is read from that one log, so there is no second thing to keep
+// in step with it and nothing to remember to press.
+
+/** Days this player logged a use of this habit, oldest first. */
+function daysUsed(state: GameState, habitId: string, playerId: Player['id']): string[] {
+  return state.completions
+    .filter(c => c.habitId === habitId && c.playerId === playerId && c.count > 0)
+    .map(c => c.date)
+    .sort();
+}
+
+/** Every day this player logged anything at all, clean days included. */
+function logDates(state: GameState, habitId: string, playerId: Player['id']): string[] {
+  return state.completions
+    .filter(c => c.habitId === habitId && c.playerId === playerId)
+    .map(c => c.date)
+    .sort();
+}
+
+/** The last day this player used, or null if the log has never shown one. */
+export function lastUseDate(state: GameState, habitId: string, playerId: Player['id']): string | null {
+  const uses = daysUsed(state, habitId, playerId);
+  return uses.length > 0 ? uses[uses.length - 1] : null;
+}
+
+/**
+ * Days clean as at `dateKey`: since the last use, or since the first day
+ * logged if there has never been one. Zero if nothing is logged, because a
+ * board nobody has opened is not a clean run.
+ */
+export function cleanRunOn(
+  state: GameState,
+  habitId: string,
+  playerId: Player['id'],
+  dateKey: string,
+): number {
+  const uses = daysUsed(state, habitId, playerId).filter(d => d <= dateKey);
+  if (uses.length > 0) return streakDays(uses[uses.length - 1], dateKey);
+  const logs = logDates(state, habitId, playerId).filter(d => d <= dateKey);
+  return logs.length > 0 ? streakDays(logs[0], dateKey) : 0;
+}
+
+/** Days clean right now. */
+export function cleanRun(
+  state: GameState,
+  habitId: string,
+  playerId: Player['id'],
+  todayKey: string,
+): number {
+  return cleanRunOn(state, habitId, playerId, todayKey);
+}
+
+/**
+ * The longest clean run this log has ever held, the run in progress included.
+ * Read from the gaps between uses, so it cannot be fiddled and cannot be lost.
+ */
+export function bestCleanRun(
+  state: GameState,
+  habitId: string,
+  playerId: Player['id'],
+  todayKey: string,
+): number {
+  const uses = daysUsed(state, habitId, playerId);
+  if (uses.length === 0) return cleanRunOn(state, habitId, playerId, todayKey);
+  const logs = logDates(state, habitId, playerId);
+  let best = streakDays(logs[0], uses[0]); // the run before the first use
+  for (let i = 1; i < uses.length; i++) {
+    best = Math.max(best, streakDays(uses[i - 1], uses[i]));
+  }
+  return Math.max(best, streakDays(uses[uses.length - 1], todayKey));
+}
+
+/**
+ * What this habit has cost between two dates, inclusive, in pence. A log that
+ * records what was actually paid wins over the habit's usual price, because
+ * prices are not tidy.
+ */
+export function spentPence(
+  state: GameState,
+  habitId: string,
+  playerId: Player['id'],
+  fromKey: string,
+  toKey: string,
+): number {
+  const unit = state.habits.find(h => h.id === habitId)?.unitCost ?? 0;
+  return state.completions
+    .filter(
+      c =>
+        c.habitId === habitId &&
+        c.playerId === playerId &&
+        c.date >= fromKey &&
+        c.date <= toKey,
+    )
+    .reduce((total, c) => total + (c.spentPence ?? c.count * unit), 0);
+}
+
+/** Pence as money, for reading on a phone: 4000 becomes "£40". */
+export function money(pence: number): string {
+  const pounds = pence / 100;
+  return `£${Number.isInteger(pounds) ? pounds : pounds.toFixed(2)}`;
+}
+
 // --- XP ----------------------------------------------------------------------
 
 /**
@@ -205,7 +323,11 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
       const log = state.completions.find(
         c => c.habitId === habit.id && c.playerId === playerId && c.date === d,
       );
-      if (log && log.count === 0) xp += habit.xp;
+      // A clean day deep into a run is worth more than a clean day on day one,
+      // on the same escalating scale the streaks use.
+      if (log && log.count === 0) {
+        xp += Math.round(habit.xp * streakMultiplier(cleanRunOn(state, habit.id, playerId, d)));
+      }
     }
   }
   return xp;
