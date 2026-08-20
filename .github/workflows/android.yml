@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: android
@@ -32,7 +33,6 @@ jobs:
           # npm 10, which rejects an npm 11 lockfile as incomplete, and the
           # Capacitor CLI will not install on Node 20 at all.
           node-version: 24
-          cache: npm
 
       - uses: actions/setup-java@v4
         with:
@@ -41,19 +41,34 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - run: npm ci
+      # One block, everything captured, so a failure can be read afterwards
+      # rather than guessed at. No NEXT_PUBLIC_BASE_PATH on purpose: inside the
+      # apk the files are served from the root, not from /GAILEYS/.
+      - name: Build it
+        run: |
+          set -o pipefail
+          {
+            echo "--- node $(node -v), npm $(npm -v) ---"
+            npm ci
+            npm run build
+            npx cap sync android
+            chmod +x android/gradlew
+            (cd android && ./gradlew assembleDebug --no-daemon --stacktrace)
+          } 2>&1 | tee /tmp/ci.log
 
-      # No NEXT_PUBLIC_BASE_PATH here on purpose: inside the apk the files are
-      # served from the root, not from /GAILEYS/.
-      - run: npm run build
-
-      - run: npx cap sync android
-
-      - run: chmod +x gradlew
-        working-directory: android
-
-      - run: ./gradlew assembleDebug --no-daemon
-        working-directory: android
+      - name: Say why it failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Run ${{ github.run_number }} of the Android build failed."
+            echo
+            echo '```'
+            tail -n 120 /tmp/ci.log 2>/dev/null || echo "no log captured"
+            echo '```'
+          } > /tmp/body.md
+          gh issue create --title "Android build failed (run ${{ github.run_number }})" --body-file /tmp/body.md
 
       - uses: actions/upload-artifact@v4
         with:

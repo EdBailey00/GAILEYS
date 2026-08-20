@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: pages
@@ -26,12 +27,35 @@ jobs:
           # Capacitor CLI will not install on Node 20 at all.
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npm run build
+
+      # One block, everything captured, so a failure can be read afterwards
+      # rather than guessed at. Pages serves the app from /GAILEYS/; the
+      # Android build leaves that variable unset.
+      - name: Build it
         env:
-          # Pages serves the app from /GAILEYS/. The Android build leaves this
-          # unset so the same code loads from inside the apk.
           NEXT_PUBLIC_BASE_PATH: /GAILEYS
+        run: |
+          set -o pipefail
+          {
+            echo "--- node $(node -v), npm $(npm -v) ---"
+            npm ci
+            npm run build
+          } 2>&1 | tee /tmp/ci.log
+
+      - name: Say why it failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Run ${{ github.run_number }} of the Pages build failed."
+            echo
+            echo '```'
+            tail -n 120 /tmp/ci.log 2>/dev/null || echo "no log captured"
+            echo '```'
+          } > /tmp/body.md
+          gh issue create --title "Pages build failed (run ${{ github.run_number }})" --body-file /tmp/body.md
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
