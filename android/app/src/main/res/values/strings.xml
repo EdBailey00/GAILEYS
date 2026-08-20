@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bragging Rights</string>
+    <string name="title_activity_main">Bragging Rights</string>
+    <string name="package_name">uk.gaileys.braggingrights</string>
+    <string name="custom_url_scheme">uk.gaileys.braggingrights</string>
+</resources>

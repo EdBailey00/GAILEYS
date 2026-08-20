@@ -1,13 +1,20 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
+// Empty in the Android app, /GAILEYS on Pages. Every asset path is built from
+// it so one build works in both homes.
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export const metadata: Metadata = {
   title: 'Bragging Rights',
   description: 'The brothers’ scoreboard: meals, chores, miles and hard-won days, all worth points.',
-  manifest: '/GAILEYS/manifest.webmanifest',
+  // Next generates the manifest from manifest.ts but links it without the
+  // base path, which 404s on Pages and quietly stops the app being
+  // installable. Naming it here is the fix.
+  manifest: `${base}/manifest.webmanifest`,
   icons: {
-    icon: '/GAILEYS/icon.svg',
-    apple: '/GAILEYS/icon-512.png',
+    icon: `${base}/icon.svg`,
+    apple: `${base}/icon-512.png`,
   },
   appleWebApp: {
     capable: true,
@@ -35,8 +42,10 @@ export default function RootLayout({
         {children}
         <script
           dangerouslySetInnerHTML={{
-            __html:
-              "if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/GAILEYS/sw.js').catch(()=>{}))}",
+            // The service worker is what makes the browser version installable
+            // and offline. Inside the Android app the files are already local,
+            // so a failure to register there is expected and ignored.
+            __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('${base}/sw.js').catch(()=>{}))}`,
           }}
         />
       </body>
