@@ -38,9 +38,23 @@ jobs:
           set -o pipefail
           {
             echo "--- node $(node -v), npm $(npm -v) ---"
-            npm ci
+            # npm install, not npm ci. npm prunes platform-specific optional
+            # dependencies when it writes the lockfile, so a lockfile written
+            # on Windows is missing the linux-only pieces (@emnapi/*) that
+            # npm ci refuses to install without. install resolves what this
+            # platform actually needs and still honours the pinned versions.
+            npm install --no-audit --no-fund
             npm run build
           } 2>&1 | tee /tmp/ci.log
+
+      # The failure reports are mine, not real issues. Clear them once green.
+      - name: Clear old failure reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --state open --search 'build failed in:title' --json number --jq '.[].number'); do
+            gh issue close "$n" --comment 'Green again on run ${{ github.run_number }}.'
+          done
 
       - name: Say why it failed
         if: failure()
