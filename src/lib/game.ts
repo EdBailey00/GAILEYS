@@ -318,7 +318,9 @@ export function levelFor(xp: number): { level: number; into: number; needed: num
 // --- weekly challenges -------------------------------------------------------
 //
 // Three bonus challenges appear each week, picked deterministically from the
-// pool by the week's own date - so two phones with no server between them
+// pool by the week's own date. They are priced above the weekly jobs on
+// purpose: a challenge is a whole week held to something, not one job done.
+// Picked deterministically from the pool by the week's own date - so two phones with no server between them
 // still show the same three. Claiming one is a single honest tap, once per
 // player per week.
 
@@ -330,18 +332,18 @@ export interface Challenge {
 }
 
 export const CHALLENGE_POOL: Challenge[] = [
-  { id: 'date', name: 'Went on a date', emoji: '💐', xp: 30 },
-  { id: 'dry-week', name: '0% alcohol all week', emoji: '🚱', xp: 40 },
-  { id: 'plants-all', name: 'Watered every plant', emoji: '🪴', xp: 15 },
-  { id: 'hoover', name: 'Hoovered the place', emoji: '🌀', xp: 20 },
-  { id: 'new-recipe', name: 'Cooked something new', emoji: '🍲', xp: 25 },
-  { id: 'called-family', name: 'Rang mum or nan', emoji: '📞', xp: 20 },
-  { id: 'outside-hour', name: 'An hour outside', emoji: '🌤️', xp: 15 },
-  { id: 'ten-k', name: 'A 10,000-step day', emoji: '👣', xp: 20 },
-  { id: 'bed-every-day', name: 'Made the bed every day', emoji: '🛏️', xp: 20 },
-  { id: 'no-takeaway', name: 'No takeaway all week', emoji: '🥡', xp: 30 },
-  { id: 'early-night', name: 'In bed before 11, twice', emoji: '🌙', xp: 20 },
-  { id: 'swim-or-sauna', name: 'Swim, sauna or cold shower', emoji: '🧊', xp: 20 },
+  { id: 'date', name: 'Went on a date', emoji: '💐', xp: 50 },
+  { id: 'dry-week', name: '0% alcohol all week', emoji: '🚱', xp: 60 },
+  { id: 'plants-all', name: 'Watered every plant', emoji: '🪴', xp: 25 },
+  { id: 'hoover', name: 'Hoovered the place', emoji: '🌀', xp: 35 },
+  { id: 'new-recipe', name: 'Cooked something new', emoji: '🍲', xp: 40 },
+  { id: 'called-family', name: 'Rang mum or nan', emoji: '📞', xp: 30 },
+  { id: 'outside-hour', name: 'An hour outside', emoji: '🌤️', xp: 25 },
+  { id: 'ten-k', name: 'A 10,000-step day', emoji: '👣', xp: 30 },
+  { id: 'bed-every-day', name: 'Made the bed every day', emoji: '🛏️', xp: 35 },
+  { id: 'no-takeaway', name: 'No takeaway all week', emoji: '🥡', xp: 45 },
+  { id: 'early-night', name: 'In bed before 11, twice', emoji: '🌙', xp: 30 },
+  { id: 'swim-or-sauna', name: 'Swim, sauna or cold shower', emoji: '🧊', xp: 30 },
 ];
 
 /** Tiny deterministic hash so both phones agree on the week's picks. */

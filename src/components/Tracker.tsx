@@ -44,6 +44,8 @@ export function Tracker({
   const [price, setPrice] = useState('');
   const [editingSpend, setEditingSpend] = useState(false);
   const [spend, setSpendField] = useState('');
+  const [editingLast, setEditingLast] = useState(false);
+  const [lastDate, setLastDate] = useState(today);
 
   const me = state.players.find(p => p.id === who)!;
   const other = state.players.find(p => p.id !== who)!;
@@ -55,6 +57,12 @@ export function Tracker({
   const best = bestCleanRun(state, habit.id, who, today);
   const everUsed = lastUseDate(state, habit.id, who) !== null;
   const thisWeek = ticksInWeek(state, habit.id, who, monday);
+  // A counter nobody has pressed knows nothing, and a confident '0 days since'
+  // would be a lie rather than a blank. Once the last one is named - by
+  // pressing +, or by saying when it was - every number on the card works.
+  const anythingLogged = state.completions.some(
+    c => c.habitId === habit.id && c.playerId === who,
+  );
 
   const monthStart = today.slice(0, 8) + '01';
   const week = spentPence(state, habit.id, who, monday, today);
@@ -65,6 +73,14 @@ export function Tracker({
   const add = (n: number) => {
     if (!canTick) return;
     onChange(setTicks(state, habit.id, who, today, Math.max(0, countToday + n)));
+  };
+
+  // Saying when the last one was is the same fact as logging one, so it is
+  // written the same way: a use, on that day. Nothing else needs to know.
+  const saveLast = () => {
+    if (!canTick || !lastDate || lastDate > today) return;
+    onChange(setTicks(state, habit.id, who, lastDate, 1));
+    setEditingLast(false);
   };
 
   const savePrice = () => {
@@ -99,7 +115,7 @@ export function Tracker({
             </div>
           )}
           <div className="font-score mt-1 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-            {everUsed ? 'since the last one' : 'nothing logged yet'}
+            {everUsed ? 'since the last one' : anythingLogged ? 'since you started logging' : 'not counting yet'}
             {best > run ? ` · best ${best}` : ''}
             {` · ${other.name}: ${cleanRun(state, habit.id, other.id, today)}`}
           </div>
@@ -109,13 +125,54 @@ export function Tracker({
             className="font-score block text-3xl font-black leading-none"
             style={{ color: me.colour, transform: 'rotate(-1.5deg)' }}
           >
-            {run}
+            {anythingLogged ? run : '–'}
           </span>
           <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
             days since
           </span>
         </div>
       </div>
+
+      {/* Naming the last one, for a counter you have not had to press yet. */}
+      {canTick &&
+        (editingLast ? (
+          <div className="mt-2 flex items-center gap-2">
+            <label className="font-score text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--chalk-dim)' }}>
+              last one
+            </label>
+            <input
+              type="date"
+              value={lastDate}
+              max={today}
+              onChange={e => setLastDate(e.target.value)}
+              aria-label={`When the last ${habit.name} was`}
+              className="font-score rounded-lg border bg-transparent px-2 py-1 text-xs outline-none"
+              style={{ borderColor: 'var(--dust)', color: 'var(--chalk)', colorScheme: 'dark' }}
+            />
+            <button
+              onClick={saveLast}
+              className="rounded-lg px-3 py-1 text-xs font-bold"
+              style={{ background: 'var(--score)', color: 'var(--board)' }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditingLast(false)}
+              className="font-score text-[11px] underline-offset-2 hover:underline"
+              style={{ color: 'var(--chalk-dim)' }}
+            >
+              cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEditingLast(true)}
+            className="font-score mt-1.5 text-[11px] underline-offset-2 hover:underline"
+            style={{ color: anythingLogged ? 'var(--chalk-dim)' : 'var(--score)' }}
+          >
+            {anythingLogged ? 'set when the last one was' : 'when was the last one?'}
+          </button>
+        ))}
 
       {/* Today's log. Counting up never costs points. */}
       <div className="mt-3 flex items-center justify-between border-t pt-3" style={{ borderColor: 'var(--dust)' }}>
