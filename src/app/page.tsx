@@ -28,6 +28,7 @@ import { useBoard } from '@/lib/useBoard';
 import { ChooseBrother } from '@/components/Gate';
 import { Tracker } from '@/components/Tracker';
 import { Manage, SectionTitle } from '@/components/Manage';
+import { UpdateBanner } from '@/components/Update';
 import { VERSION } from '@/lib/version';
 
 // A floating "+10" that rises off whatever was tapped.
@@ -567,6 +568,8 @@ export default function Page() {
           onSetMe={board.setMe}
         />
       )}
+
+      <UpdateBanner />
 
       {/* Floating scores */}
       {floats.map(f => (

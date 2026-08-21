@@ -8,6 +8,12 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  // version.json is the app asking which push the server is on. A cached
+  // answer to that question is worse than no answer, so it never goes in.
+  if (new URL(event.request.url).pathname.endsWith('/version.json')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then(res => {

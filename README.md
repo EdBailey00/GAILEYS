@@ -108,6 +108,15 @@ build and wants reopening (or reinstalling, for the apk).
 
 Bump it on every push. Nothing enforces it.
 
+The app checks for itself. In a browser it asks the server for
+`version.json` (written into the build by `scripts/version-file.mjs`) when it
+opens, when you come back to it and when signal returns; if that names a
+different push, a bar appears at the bottom and one tap clears the cache and
+reloads onto it. Inside the apk the files are baked in, so nothing the app can
+do would update it - there it asks GitHub what the latest release is called
+and, if it is a different push, points you at the apk. Installing is still a
+tap on a file, because that is what sideloading is.
+
 ## Deployment
 
 - `.github/workflows/pages.yml` - the browser version, on every push to main.
