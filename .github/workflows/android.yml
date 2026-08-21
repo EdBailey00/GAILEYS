@@ -4,9 +4,15 @@ name: Build the Android app
 # To put it on a phone: open the release page on the phone, tap the apk, and
 # allow installs from that source when Android asks.
 #
+# The apk is a shell around the deployed site rather than a copy of it, so it
+# only needs installing once: after that every push reaches it the same second
+# it reaches the browser. A new apk is still published each time because the
+# native side of it can change, but installing one is no longer how updates
+# arrive.
+#
 # It is debug-signed, which is all a sideloaded app needs. The board lives on
 # the server now, so if a signing change ever forces an uninstall, nothing is
-# lost: sign back in and the whole board comes down again.
+# lost: pick your name again and the whole board comes down.
 
 on:
   push:
@@ -98,5 +104,5 @@ jobs:
           ver=$(sed -n "s/.*VERSION = '\(.*\)'.*/\1/p" src/lib/version.ts)
           mv android/app/build/outputs/apk/debug/app-debug.apk bragging-rights.apk
           gh release create "app-${{ github.run_number }}" bragging-rights.apk \
-            --title "$ver" \
-            --notes "Open this page on your Android phone and tap the apk to install. This is $ver, the same string the app shows at the bottom of its own screen - if they do not match, the phone is on an older build."
+            --title "$ver (shell)" \
+            --notes "Only needed once. This apk is a shell around https://edbailey00.github.io/GAILEYS/, so it is always on whatever was last pushed and updates without being reinstalled. Built at $ver. Reinstall only if the native side changes or the app will not open."

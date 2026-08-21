@@ -15,9 +15,14 @@
 // server, say. Reloading a second time for the same version would be a loop,
 // so that one falls back to asking, once.
 //
-// Inside the apk the files are baked in. Nothing the app can do changes them,
-// so there it asks GitHub what the latest release is called and points at it.
-// Installing is still a tap on an apk, because that is what sideloading is.
+// The apk is a shell around the same site, so it updates exactly the same way
+// and needs installing once rather than every push.
+//
+// An older apk with the files baked into it cannot do that: nothing it can do
+// changes them. Those are told apart by where the page came from - a bundled
+// app is served from localhost, a shell from the site itself - and a bundled
+// one falls back to asking GitHub what the latest release is called and
+// pointing at it, which is all it can honestly offer.
 
 import { useCallback, useEffect, useState } from 'react';
 import { VERSION } from '@/lib/version';
@@ -36,13 +41,19 @@ interface Capacitored {
   Capacitor?: { isNativePlatform?: () => boolean };
 }
 
-const isNative = (): boolean =>
+/**
+ * An apk carrying its own copy of the files, which can never update itself.
+ * The shell apk loads the live site, so it is not one of these: it is served
+ * from the site's own origin and updates like any browser would.
+ */
+const isBundled = (): boolean =>
   typeof window !== 'undefined' &&
-  Boolean((window as Capacitored).Capacitor?.isNativePlatform?.());
+  Boolean((window as Capacitored).Capacitor?.isNativePlatform?.()) &&
+  window.location.hostname === 'localhost';
 
 /** Which push is current, or null if there is no answer worth acting on. */
 async function currentVersion(): Promise<string | null> {
-  if (isNative()) {
+  if (isBundled()) {
     const last = Number(localStorage.getItem(CHECKED_AT) ?? 0);
     if (Date.now() - last < NATIVE_GAP_MS) return null;
     localStorage.setItem(CHECKED_AT, String(Date.now()));
@@ -77,7 +88,7 @@ export function UpdateBanner() {
       // Only a different string is news. Not newer, not older: different,
       // because the version is a name and not a number to compare.
       if (!current || current === VERSION) return;
-      if (isNative()) {
+      if (isBundled()) {
         setNewer(current);
         return;
       }
@@ -114,7 +125,7 @@ export function UpdateBanner() {
   if (!newer || dismissed) return null;
 
   const update = async () => {
-    if (isNative()) {
+    if (isBundled()) {
       window.open(RELEASES, '_blank');
       return;
     }
@@ -136,7 +147,7 @@ export function UpdateBanner() {
           <span className="block text-sm font-semibold leading-tight">{newer} is out</span>
           <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
             you are on {VERSION}
-            {isNative() ? ' · opens the release to install' : ' · could not update on its own'}
+            {isBundled() ? ' · opens the release to install' : ' · could not update on its own'}
           </span>
         </span>
         <button
@@ -145,7 +156,7 @@ export function UpdateBanner() {
           className="rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50"
           style={{ background: 'var(--score)', color: 'var(--board)' }}
         >
-          {working ? 'updating' : isNative() ? 'Get it' : 'Update'}
+          {working ? 'updating' : isBundled() ? 'Get it' : 'Update'}
         </button>
         <button
           onClick={() => setDismissed(true)}

@@ -4,10 +4,14 @@ The Bailey brothers' scoreboard. Meals, chores and miles, all worth points;
 whoever's ahead on Sunday night gets the bragging rights. The drink, the
 ciggies and the ket are counted separately and score nothing.
 
-**On Android:** install the app from the latest release, at
+**On Android:** install the app once, from the latest release at
 https://github.com/EdBailey00/GAILEYS/releases/latest. Open that page on the
 phone, tap the `.apk`, and allow installs from that source when Android asks.
-Every push to `main` builds a new one.
+
+Once. The apk is a shell around the deployed site rather than a copy of it, so
+every push reaches it the same second it reaches the browser and there is
+nothing to reinstall. The cost is that the very first launch needs signal;
+after that the service worker has the files and it opens offline as before.
 
 **In a browser:** https://edbailey00.github.io/GAILEYS/ - the same app, and
 still installable from the browser menu ("Install app" / "Add to Home Screen")
@@ -133,6 +137,19 @@ the Supabase project; the migrations that built it are named `core_schema`,
 
 The url and publishable key in `src/lib/supabase.ts` are not secrets and are
 not treated as any. Any static build inlines them and this repo is public.
+
+## Updating
+
+The app keeps itself current. It asks the server which push is live when it
+opens, when you come back to it and when signal returns, and if that is a
+different one it empties its caches and reloads onto it, without asking -
+there is nothing to decide, and every tap is already saved on the phone and
+the server before a reload could happen. The Android app does the same thing,
+because it is the same site.
+
+Only an apk from before this change cannot: those carry their own copy of the
+files and nothing they can do replaces it. They fall back to pointing at the
+latest release, which is the shell, which is the last one they need.
 
 ## Which push am I on
 
