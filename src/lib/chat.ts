@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Player } from './game';
+import { DEMO_MESSAGES, isDemo } from './demo';
 import { supabase } from './supabase';
 
 export interface Message {
@@ -60,6 +61,9 @@ export interface Chat {
 }
 
 export function useChat(me: Player['id'] | null): Chat {
+  // A demo thread is a thread with itself: it never reaches the server, so
+  // whoever is having a go cannot read, or write into, the real one.
+  const [demo] = useState(isDemo);
   const [messages, setMessages] = useState<Message[]>([]);
   const [ready, setReady] = useState(false);
   const [missing, setMissing] = useState(false);
@@ -72,6 +76,11 @@ export function useChat(me: Player['id'] | null): Chat {
   }, []);
 
   const pull = useCallback(async () => {
+    if (demo) {
+      setMessages(m => (m.length > 0 ? m : DEMO_MESSAGES));
+      setReady(true);
+      return;
+    }
     if (busy.current) return;
     busy.current = true;
     try {
@@ -98,12 +107,13 @@ export function useChat(me: Player['id'] | null): Chat {
       busy.current = false;
       setReady(true);
     }
-  }, []);
+  }, [demo]);
 
   // The other phone's messages as they land, plus the ordinary moments worth
   // checking: coming back to the app, and getting signal again.
   useEffect(() => {
     void pull();
+    if (demo) return;
     const channel = supabase
       .channel('chat')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => void pull())
@@ -118,12 +128,19 @@ export function useChat(me: Player['id'] | null): Chat {
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('online', wake);
     };
-  }, [pull]);
+  }, [demo, pull]);
 
   const send = useCallback(
     async (body: string): Promise<boolean> => {
       const text = body.trim();
       if (!text || !me) return false;
+      if (demo) {
+        setMessages(m => [
+          ...m,
+          { id: `demo-${m.length}`, by: me, body: text, at: new Date().toISOString() },
+        ]);
+        return true;
+      }
       const { error } = await supabase.from('messages').insert({ player_id: me, body: text });
       if (error) {
         if (isMissingTable(error)) setMissing(true);
@@ -133,15 +150,16 @@ export function useChat(me: Player['id'] | null): Chat {
       await pull();
       return true;
     },
-    [me, pull],
+    [demo, me, pull],
   );
 
   const markSeen = useCallback(() => {
+    if (demo) return;
     const latest = messages[messages.length - 1]?.at;
     if (!latest) return;
     localStorage.setItem(SEEN, latest);
     setSeen(latest);
-  }, [messages]);
+  }, [demo, messages]);
 
   // Your own messages are not news to you.
   const unread = messages.filter(m => m.at > seen && m.by !== me).length;

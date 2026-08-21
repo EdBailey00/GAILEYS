@@ -15,6 +15,7 @@ import type { GameState, Player } from './game';
 import { emptyState, load, save, sealPastWeeks } from './store';
 import { pull, watch } from './remote';
 import { diff, flush, pending, queue } from './sync';
+import { DEMO_KEY, demoBoard, isDemo } from './demo';
 
 const ME_KEY = 'bragging-rights-me';
 
@@ -38,6 +39,10 @@ export interface Board {
 }
 
 export function useBoard(): Board {
+  // A demo board never speaks to the server. Not 'sends nothing important':
+  // never asks it anything and never tells it anything, so somebody having a
+  // go with the app cannot touch, or see, the real one.
+  const [demo] = useState(isDemo);
   const [state, setState] = useState<GameState>(emptyState);
   const [me, setMeState] = useState<Player['id'] | null>(null);
   const [stage, setStage] = useState<Stage>('loading');
@@ -47,7 +52,7 @@ export function useBoard(): Board {
 
   /** Empty the outbox, then take the server's copy, then seal any dead weeks. */
   const refresh = useCallback(async () => {
-    if (busy.current) return;
+    if (demo || busy.current) return;
     busy.current = true;
     try {
       await flush();
@@ -64,11 +69,20 @@ export function useBoard(): Board {
     } finally {
       busy.current = false;
     }
-  }, []);
+  }, [demo]);
 
   // This phone's copy, and who it belongs to, before anything touches the
   // network. Both are on the device, so this is instant and works offline.
   useEffect(() => {
+    if (demo) {
+      // The tester's own taps survive a reload, under their own key, so the
+      // real board's copy on this device is neither read nor written.
+      const kept = localStorage.getItem(DEMO_KEY);
+      setState(kept ? (JSON.parse(kept) as GameState) : demoBoard());
+      setMeState('p1');
+      setStage('ready');
+      return;
+    }
     setState(load());
     const stored = localStorage.getItem(ME_KEY);
     if (stored === 'p1' || stored === 'p2') {
@@ -78,22 +92,26 @@ export function useBoard(): Board {
     } else {
       setStage('choosing');
     }
-  }, [refresh]);
+  }, [demo, refresh]);
 
   const setMe = useCallback(
     (id: Player['id']) => {
+      if (demo) {
+        setMeState(id);
+        return;
+      }
       localStorage.setItem(ME_KEY, id);
       setMeState(id);
       setStage('ready');
       void refresh();
     },
-    [refresh],
+    [demo, refresh],
   );
 
   // The other phone's taps, as they happen. Plus the ordinary moments worth
   // checking: coming back to the app, and getting signal again.
   useEffect(() => {
-    if (stage !== 'ready') return;
+    if (demo || stage !== 'ready') return;
     const stop = watch(() => void refresh());
     const wake = () => {
       if (document.visibilityState === 'visible') void refresh();
@@ -105,17 +123,22 @@ export function useBoard(): Board {
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('online', wake);
     };
-  }, [stage, refresh]);
+  }, [demo, stage, refresh]);
 
   const update = useCallback(
     (next: GameState) => {
+      if (demo) {
+        setState(next);
+        localStorage.setItem(DEMO_KEY, JSON.stringify(next));
+        return;
+      }
       queue(diff(state, next));
       setState(next);
       save(next);
       setWaiting(pending());
       void flush().then(() => setWaiting(pending()));
     },
-    [state],
+    [demo, state],
   );
 
   return { state, me, stage, waiting, trouble, update, refresh, setMe };

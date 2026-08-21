@@ -26,6 +26,7 @@ import {
 import { acceptProposal, rejectProposal, setTicks, unclaimChallenge, untickWeek } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
 import { useChat } from '@/lib/chat';
+import { isDemo } from '@/lib/demo';
 import { ChooseBrother } from '@/components/Gate';
 import { Chat } from '@/components/Chat';
 import { CounterCircles, CountersPage } from '@/components/Counters';
@@ -53,6 +54,7 @@ export default function Page() {
   // Four places to be: the board, the counters in full, the long view, and
   // the thread.
   const [view, setView] = useState<View>('board');
+  const [demo] = useState(isDemo);
   const [manage, setManage] = useState(false);
   const [floats, setFloats] = useState<FloatScore[]>([]);
   const [stamped, setStamped] = useState<string | null>(null);
@@ -149,6 +151,21 @@ export default function Page() {
 
   return (
     <main className="mx-auto max-w-md px-4 pb-28 pt-4" style={{ minHeight: '100dvh' }}>
+      {/* Somebody having a go should never be left wondering whose numbers
+          these are, or whether pressing something matters. */}
+      {demo && (
+        <div
+          className="mb-3 rounded-xl border px-3 py-2 text-center"
+          style={{ borderColor: 'var(--score)', background: 'var(--board-raised)' }}
+        >
+          <div className="font-score text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: 'var(--score)' }}>
+            Demo
+          </div>
+          <div className="mt-0.5 text-[11px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+            Made-up board, made-up players. Press anything you like - none of it reaches anyone.
+          </div>
+        </div>
+      )}
       {/* ---- The week, and the tug of war ---------------------------------- */}
       {view === 'board' && (
       <header>
@@ -552,6 +569,7 @@ export default function Page() {
         </button>
         <div className="font-score mt-3 text-[10px] tracking-[0.14em]" style={{ color: 'var(--chalk-dim)' }}>
           {VERSION}
+          {demo ? ' · demo' : ''}
         </div>
       </div>
       )}

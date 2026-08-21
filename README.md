@@ -138,6 +138,21 @@ the Supabase project; the migrations that built it are named `core_schema`,
 The url and publishable key in `src/lib/supabase.ts` are not secrets and are
 not treated as any. Any static build inlines them and this repo is public.
 
+## Showing somebody
+
+`?demo` opens the same app on an invented board:
+https://edbailey00.github.io/GAILEYS/?demo
+
+It is not a screenshot and not a cut-down build - it is this code with a
+different board underneath. Every page works, every tap lands, the numbers
+move. What it does not do is speak to the server: in demo mode `useBoard` and
+`useChat` never call it, so a stranger having a go cannot read the real board
+or write a single row to it. Their taps go to their own localStorage key.
+
+That matters because there is no sign-in. Anyone with the plain address gets
+the real board, counters included, and can tick as either brother. So the
+plain link is for the two of them and the `?demo` one is for everybody else.
+
 ## Updating
 
 The app keeps itself current. It asks the server which push is live when it
