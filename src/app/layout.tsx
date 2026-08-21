@@ -45,7 +45,10 @@ export default function RootLayout({
             // The service worker is what makes the browser version installable
             // and offline. Inside the Android app the files are already local,
             // so a failure to register there is expected and ignored.
-            __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('${base}/sw.js').catch(()=>{}))}`,
+            // updateViaCache:'none' so the worker itself is never served
+            // from the http cache, and a check on every resume so a phone that
+            // was left open for a week still notices a new one.
+            __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('${base}/sw.js',{updateViaCache:'none'}).then(function(r){document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')r.update()})}).catch(function(){})})}`,
           }}
         />
       </body>

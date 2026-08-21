@@ -6,4 +6,4 @@
 // know whether you are on the build you just asked for.
 //
 // BUMP THIS ON EVERY PUSH. It is one line and nothing else keeps it honest.
-export const VERSION = 'gailey.v.03';
+export const VERSION = 'gailey.v.04';
