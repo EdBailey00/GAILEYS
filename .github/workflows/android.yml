@@ -93,7 +93,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # The version the app shows at the bottom of its own screen, so the
+          # releases page and the phone agree on which push this is.
+          ver=$(sed -n "s/.*VERSION = '\(.*\)'.*/\1/p" src/lib/version.ts)
           mv android/app/build/outputs/apk/debug/app-debug.apk bragging-rights.apk
           gh release create "app-${{ github.run_number }}" bragging-rights.apk \
-            --title "Bragging Rights build ${{ github.run_number }}" \
-            --notes "Open this page on your Android phone and tap the apk to install."
+            --title "$ver" \
+            --notes "Open this page on your Android phone and tap the apk to install. This is $ver, the same string the app shows at the bottom of its own screen - if they do not match, the phone is on an older build."

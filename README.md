@@ -98,6 +98,16 @@ the Supabase project; the migrations that built it are named `core_schema`,
 The url and publishable key in `src/lib/supabase.ts` are not secrets and are
 not treated as any. Any static build inlines them and this repo is public.
 
+## Which push am I on
+
+`src/lib/version.ts` holds one string, `gailey.v.NN`. It is printed at the
+bottom of every screen in the app and used as the title of the apk release, so
+the phone and the releases page name the same build. If the number at the
+bottom of the app is not the one you just pushed, the phone is on an older
+build and wants reopening (or reinstalling, for the apk).
+
+Bump it on every push. Nothing enforces it.
+
 ## Deployment
 
 - `.github/workflows/pages.yml` - the browser version, on every push to main.

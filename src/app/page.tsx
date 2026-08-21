@@ -28,6 +28,7 @@ import { useBoard } from '@/lib/useBoard';
 import { ChooseBrother } from '@/components/Gate';
 import { Tracker } from '@/components/Tracker';
 import { Manage, SectionTitle } from '@/components/Manage';
+import { VERSION } from '@/lib/version';
 
 // A floating "+10" that rises off whatever was tapped.
 interface FloatScore {
@@ -552,6 +553,9 @@ export default function Page() {
         >
           {manage ? 'close settings' : 'players & habits'}
         </button>
+        <div className="font-score mt-3 text-[10px] tracking-[0.14em]" style={{ color: 'var(--chalk-dim)' }}>
+          {VERSION}
+        </div>
       </div>
       {manage && (
         <Manage
