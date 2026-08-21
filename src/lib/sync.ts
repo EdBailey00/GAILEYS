@@ -13,7 +13,6 @@ import { send } from './remote';
 export type Op =
   | { t: 'completion.set'; habitId: string; playerId: Player['id']; date: string; count: number; spentPence?: number }
   | { t: 'completion.del'; habitId: string; playerId: Player['id']; date: string }
-  | { t: 'streak.set'; habitId: string; playerId: Player['id']; startedOn: string; best: number }
   | { t: 'habit.set'; habit: Habit }
   | { t: 'history.set'; weekOf: string; p1: number; p2: number }
   | { t: 'proposal.set'; proposal: Proposal }
@@ -21,7 +20,6 @@ export type Op =
   | { t: 'player.set'; id: Player['id']; name: string; emoji: string; colour: string };
 
 const cellKey = (habitId: string, playerId: string, date: string) => `${habitId}|${playerId}|${date}`;
-const pairKey = (habitId: string, playerId: string) => `${habitId}|${playerId}`;
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -69,22 +67,6 @@ export function diff(before: GameState, after: GameState): Op[] {
     }
   }
 
-  const streaksBefore = new Map(
-    before.streaks.map(s => [pairKey(s.habitId, s.playerId), s]),
-  );
-  for (const s of after.streaks) {
-    const key = pairKey(s.habitId, s.playerId);
-    if (!same(streaksBefore.get(key), s)) {
-      ops.push({
-        t: 'streak.set',
-        habitId: s.habitId,
-        playerId: s.playerId,
-        startedOn: s.startedOn,
-        best: s.best,
-      });
-    }
-  }
-
   const historyBefore = new Map(before.history.map(w => [w.weekOf, w]));
   for (const w of after.history) {
     if (!same(historyBefore.get(w.weekOf), w)) {
@@ -110,8 +92,6 @@ function target(op: Op): string {
     case 'completion.set':
     case 'completion.del':
       return `c|${op.habitId}|${op.playerId}|${op.date}`;
-    case 'streak.set':
-      return `s|${op.habitId}|${op.playerId}`;
     case 'habit.set':
       return `h|${op.habit.id}`;
     case 'history.set':

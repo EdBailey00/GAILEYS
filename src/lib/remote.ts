@@ -10,7 +10,6 @@ import type {
   Habit,
   Player,
   Proposal,
-  StreakState,
   WeekResult,
 } from './game';
 import type { Op } from './sync';
@@ -28,7 +27,8 @@ interface HabitRow {
   name: string;
   detail: string | null;
   emoji: string;
-  kind: Habit['kind'];
+  /** 'streak' still appears here: see toHabit. */
+  kind: Habit['kind'] | 'streak';
   target: number;
   xp: number;
   archived: boolean;
@@ -42,13 +42,6 @@ interface CompletionRow {
   date: string;
   count: number;
   spent_pence: number | null;
-}
-
-interface StreakRow {
-  habit_id: string;
-  player_id: 'p1' | 'p2';
-  started_on: string;
-  best: number;
 }
 
 interface HistoryRow {
@@ -116,19 +109,18 @@ export async function pullSeatRequests(): Promise<SeatRequest[]> {
 
 /** The whole board. It is a few kilobytes, so there is nothing to page. */
 export async function pull(): Promise<GameState> {
-  const [players, habits, completions, streaks, history, proposals] = await Promise.all([
+  const [players, habits, completions, history, proposals] = await Promise.all([
     supabase.from('players').select('id, name, emoji, colour').order('id'),
     supabase
       .from('habits')
       .select('id, name, detail, emoji, kind, target, xp, archived, unit_cost_pence, sort')
       .order('sort'),
     supabase.from('completions').select('habit_id, player_id, date, count, spent_pence'),
-    supabase.from('streaks').select('habit_id, player_id, started_on, best'),
     supabase.from('history').select('week_of, p1, p2').order('week_of'),
     supabase.from('proposals').select('id, by, kind, habit, habit_id'),
   ]);
 
-  const failed = [players, habits, completions, streaks, history, proposals].find(r => r.error);
+  const failed = [players, habits, completions, history, proposals].find(r => r.error);
   if (failed?.error) throw failed.error;
 
   const playerRows = (players.data ?? []) as PlayerRow[];
@@ -139,7 +131,6 @@ export async function pull(): Promise<GameState> {
     ],
     habits: ((habits.data ?? []) as HabitRow[]).map(toHabit),
     completions: ((completions.data ?? []) as CompletionRow[]).map(toCompletion),
-    streaks: ((streaks.data ?? []) as StreakRow[]).map(toStreak),
     history: ((history.data ?? []) as HistoryRow[]).map(toWeek),
     proposals: ((proposals.data ?? []) as ProposalRow[]).map(toProposal),
   };
@@ -151,7 +142,11 @@ function toHabit(r: HabitRow): Habit {
     id: r.id,
     name: r.name,
     emoji: r.emoji,
-    kind: r.kind,
+    // The drink was a count-up streak that scored points per day held. It is
+    // a counter now, like the ciggies and the ket, so a row still marked
+    // 'streak' is read as one. The column corrects itself the next time the
+    // habit is edited, the same way owner does.
+    kind: r.kind === 'streak' ? 'tally' : r.kind,
     target: r.target,
     xp: r.xp,
   };
@@ -171,13 +166,6 @@ function toCompletion(r: CompletionRow): Completion {
   if (r.spent_pence !== null) c.spentPence = r.spent_pence;
   return c;
 }
-
-const toStreak = (r: StreakRow): StreakState => ({
-  habitId: r.habit_id,
-  playerId: r.player_id,
-  startedOn: r.started_on,
-  best: r.best,
-});
 
 const toWeek = (r: HistoryRow): WeekResult => ({ weekOf: r.week_of, p1: r.p1, p2: r.p2 });
 
@@ -217,19 +205,6 @@ export async function send(op: Op): Promise<void> {
         .eq('habit_id', op.habitId)
         .eq('player_id', op.playerId)
         .eq('date', op.date);
-      if (error) throw error;
-      return;
-    }
-    case 'streak.set': {
-      const { error } = await supabase.from('streaks').upsert(
-        {
-          habit_id: op.habitId,
-          player_id: op.playerId,
-          started_on: op.startedOn,
-          best: op.best,
-        },
-        { onConflict: 'habit_id,player_id' },
-      );
       if (error) throw error;
       return;
     }

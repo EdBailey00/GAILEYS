@@ -16,10 +16,6 @@ import {
   challengesFor,
   dailyCap,
   levelFor,
-  nextMilestone,
-  streakDays,
-  streakFor,
-  streakMultiplier,
   ticksInWeek,
   ticksOn,
   today,
@@ -27,14 +23,7 @@ import {
   weekOf,
   weekXp,
 } from '@/lib/game';
-import {
-  acceptProposal,
-  rejectProposal,
-  resetStreak,
-  setTicks,
-  unclaimChallenge,
-  untickWeek,
-} from '@/lib/store';
+import { acceptProposal, rejectProposal, setTicks, unclaimChallenge, untickWeek } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
 import { ChooseBrother } from '@/components/Gate';
 import { Tracker } from '@/components/Tracker';
@@ -57,7 +46,6 @@ export default function Page() {
   // The board, or the tally. Two different jobs, so two tabs.
   const [tab, setTab] = useState<'board' | 'cutting'>('board');
   const [manage, setManage] = useState(false);
-  const [confirmReset, setConfirmReset] = useState<string | null>(null);
   const [floats, setFloats] = useState<FloatScore[]>([]);
   const [stamped, setStamped] = useState<string | null>(null);
   const floatId = useRef(1);
@@ -66,10 +54,10 @@ export default function Page() {
   const monday = weekOf(t);
 
   const scores = useMemo(() => {
-    const p1 = weekXp(state, 'p1', monday, t);
-    const p2 = weekXp(state, 'p2', monday, t);
+    const p1 = weekXp(state, 'p1', monday);
+    const p2 = weekXp(state, 'p2', monday);
     return { p1, p2 };
-  }, [state, monday, t]);
+  }, [state, monday]);
 
   if (board.stage === 'loading') {
     return <main className="min-h-screen" />;
@@ -100,8 +88,7 @@ export default function Page() {
   const active = state.habits.filter(h => !h.archived);
   const daily = active.filter(h => h.kind === 'daily' || h.kind === 'multi');
   const weekly = active.filter(h => h.kind === 'weekly');
-  const streaks = active.filter(h => h.kind === 'streak');
-  const tallies = active.filter(h => h.kind === 'tally');
+  const counters = active.filter(h => h.kind === 'tally');
 
   const myTotal = totalXp(state, who, t);
   const level = levelFor(myTotal);
@@ -479,94 +466,6 @@ export default function Page() {
           })}
         </div>
 
-        {/* ---- The hard-won days ---------------------------------------------- */}
-        <SectionTitle>The hard-won days</SectionTitle>
-        <div className="space-y-2">
-          {streaks.map(habit => {
-            const s = streakFor(state, habit.id, who);
-            const days = s ? streakDays(s.startedOn, t) : 0;
-            const mult = streakMultiplier(days);
-            const next = nextMilestone(days);
-            const otherS = streakFor(state, habit.id, who === 'p1' ? 'p2' : 'p1');
-            const otherDays = otherS ? streakDays(otherS.startedOn, t) : 0;
-            return (
-              <div
-                key={habit.id}
-                className="rounded-2xl border px-4 py-3"
-                style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{habit.emoji}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold leading-tight">{habit.name}</div>
-                    <div className="font-score mt-0.5 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-                      {next ? `${next - days} to day ${next}` : 'past every milestone'}
-                      {s && s.best > 0 ? ` · best ${s.best}` : ''}
-                      {` · ${state.players.find(p => p.id !== who)!.name}: ${otherDays}`}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className="font-score block text-3xl font-black leading-none"
-                      style={{ color: me.colour, transform: 'rotate(-1.5deg)' }}
-                    >
-                      {days}
-                    </span>
-                    <span className="font-score text-[10px]" style={{ color: 'var(--score)' }}>
-                      +{Math.round(habit.xp * mult)}/day{mult > 1 ? ` · x${mult}` : ''}
-                    </span>
-                  </div>
-                </div>
-                {confirmReset === habit.id ? (
-                  <div className="mt-3 rounded-xl border px-3 py-2.5" style={{ borderColor: 'var(--care)' }}>
-                    <p className="text-xs leading-snug" style={{ color: 'var(--chalk)' }}>
-                      Day 0 it is - telling the truth is the hard part, and the {Math.max(days, s?.best ?? 0)}-day
-                      best stays yours. Back on it tomorrow.
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => {
-                          update(resetStreak(state, habit.id, who));
-                          setConfirmReset(null);
-                        }}
-                        className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                        style={{ background: 'var(--care)', color: 'var(--board)' }}
-                      >
-                        Reset to day 0
-                      </button>
-                      <button
-                        onClick={() => setConfirmReset(null)}
-                        className="rounded-lg border px-3 py-1.5 text-xs"
-                        style={{ borderColor: 'var(--dust)' }}
-                      >
-                        Keep counting
-                      </button>
-                    </div>
-                  </div>
-                ) : s ? (
-                  <button
-                    onClick={() => setConfirmReset(habit.id)}
-                    className="font-score mt-2 text-[11px] underline-offset-2 hover:underline"
-                    style={{ color: 'var(--chalk-dim)' }}
-                  >
-                    slipped? reset honestly
-                  </button>
-                ) : (
-                  canTick && (
-                    <button
-                      onClick={() => update(resetStreak(state, habit.id, who))}
-                      className="font-score mt-2 rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
-                      style={{ borderColor: 'var(--score)', color: 'var(--score)' }}
-                    >
-                      start counting from today
-                    </button>
-                  )
-                )}
-              </div>
-            );
-          })}
-        </div>
-
         {/* ---- The ledger ------------------------------------------------------ */}
         {state.history.length > 0 && (
           <>
@@ -601,14 +500,14 @@ export default function Page() {
       {/* ---- Cutting down: its own tab, because it is its own thing ------- */}
       {tab === 'cutting' && (
         <div className="mt-4">
-          {tallies.length === 0 ? (
+          {counters.length === 0 ? (
             <p className="text-sm leading-snug" style={{ color: 'var(--chalk-dim)' }}>
-              Nothing on the tally yet. Add one under players &amp; habits as a
-              &ldquo;cutting down&rdquo; habit and it lands here.
+              No counters yet. Add one under players &amp; habits, as a counter,
+              and it lands here.
             </p>
           ) : (
             <div className="space-y-2">
-            {tallies.map(habit => (
+            {counters.map(habit => (
               <Tracker
                 key={habit.id}
                 state={state}
@@ -618,8 +517,6 @@ export default function Page() {
                 today={t}
                 monday={monday}
                 onChange={update}
-                onPop={pop}
-                stamped={stamped}
               />
             ))}
             </div>

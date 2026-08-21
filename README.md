@@ -1,7 +1,8 @@
 # Bragging Rights
 
-The Bailey brothers' scoreboard. Meals, chores, miles and hard-won days, all
-worth points; whoever's ahead on Sunday night gets the bragging rights.
+The Bailey brothers' scoreboard. Meals, chores and miles, all worth points;
+whoever's ahead on Sunday night gets the bragging rights. The drink, the
+ciggies and the ket are counted separately and score nothing.
 
 **On Android:** install the app from the latest release, at
 https://github.com/EdBailey00/GAILEYS/releases/latest. Open that page on the
@@ -42,31 +43,31 @@ a flat battery safe rather than a guess.
 - **Today**: daily ticks (2L of water, dishes) and multi-ticks (3 meals).
 - **This week**: targets per week (gym x3, 5km, climbing) - Monday reset.
 - **Challenges**: three bonus challenges a week, drawn from a pool.
-- **The hard-won days**: count-up streaks, worth more the longer they run:
-  x1.5 after a week, x2 after a month, x3 after a hundred days. Resetting is
-  honest and keeps your best run.
-- **Cutting down**: its own tab, not part of the board. Logging a use never
-  costs points and a declared clean day scores, on the same escalating scale,
-  so a clean day on day 40 is worth more than one on day 4.
 - Sealed weeks land in the ledger at the bottom - the permanent record.
+
+The counters are not in any of that. See below.
 
 Every habit is definitive. "Drink 2L water", not "drank water": each one names
 a number or an unambiguous finish line, with the detail underneath, so there is
 never an argument about whether it counted.
 
-### The tracker
+### The counters
 
-The beer, the ciggies and the ket live behind the second tab, away from the
-ticking. They are not habits you are trying to do more of, their numbers read
-the other way round, and they should not be the thing you scroll past on the
-way to ticking the dishes off.
+The drink, the ciggies and the ket live behind the second tab, and they are
+not part of the game at all. Two numbers each:
 
-A tally habit given a price becomes a proper tracker: days clean, the longest
-clean run ever held, and what it has cost this week, this month and all time.
-Every one of those numbers is read from the same log, so there is nothing to
-keep in step and nothing to remember to press. Days clean comes from the last
-use in the log, and the best run from the gaps between uses, which means it
-cannot be fiddled and cannot be lost.
+- **days since** the last one
+- **how many this week**
+
+Both are read from one log: you tap the number of what you actually had, and
+everything else follows. Days since comes from the last use in the log, so it
+cannot be fiddled and cannot be lost. Give a counter a price and it adds up
+what it has cost this week, this month and all time.
+
+None of it scores, and that is the point. A number you are scored on is a
+number you have a reason to shade, and these are the ones that have to stay
+true. Logging four ciggies costs nothing and a clean fortnight earns nothing;
+the scoreline at the top is untouched either way.
 
 ## Working on it
 
@@ -84,7 +85,7 @@ The layers, smallest first:
 
 | File | Job |
 |---|---|
-| `src/lib/game.ts` | the rules: XP, weeks, streaks, clean runs, money. Pure |
+| `src/lib/game.ts` | the rules: XP, weeks, the counters, money. Pure |
 | `src/lib/store.ts` | this phone's copy, and every change as a pure function |
 | `src/lib/sync.ts` | what changed, and the outbox that survives no signal |
 | `src/lib/remote.ts` | rows in, rows out. The only file that knows SQL exists |

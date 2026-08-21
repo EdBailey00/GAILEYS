@@ -37,7 +37,6 @@ export function emptyState(): GameState {
     ],
     habits: [],
     completions: [],
-    streaks: [],
     history: [],
     proposals: [],
   };
@@ -77,14 +76,10 @@ export function sealPastWeeks(state: GameState): GameState {
   if (mondaysWithPlay.size === 0) return state;
   const history = [...state.history];
   for (const monday of [...mondaysWithPlay].sort()) {
-    // The week is over: XP up to its Sunday.
-    const sunday = new Date(monday + 'T12:00:00');
-    sunday.setDate(sunday.getDate() + 6);
-    const sundayKey = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`;
     history.push({
       weekOf: monday,
-      p1: weekXp(state, 'p1', monday, sundayKey),
-      p2: weekXp(state, 'p2', monday, sundayKey),
+      p1: weekXp(state, 'p1', monday),
+      p2: weekXp(state, 'p2', monday),
     });
   }
   return { ...state, history };
@@ -189,16 +184,6 @@ export function acceptProposal(state: GameState, proposalId: string): GameState 
   let next: GameState = { ...state, proposals: state.proposals.filter(x => x.id !== proposalId) };
   if (p.kind === 'add' && p.habit) {
     next = { ...next, habits: [...next.habits, p.habit] };
-    if (p.habit.kind === 'streak') {
-      next = {
-        ...next,
-        streaks: [
-          ...next.streaks,
-          { habitId: p.habit.id, playerId: 'p1', startedOn: today(), best: 0 },
-          { habitId: p.habit.id, playerId: 'p2', startedOn: today(), best: 0 },
-        ],
-      };
-    }
   }
   if (p.kind === 'retire' && p.habitId) {
     next = {
@@ -219,27 +204,6 @@ export function acceptProposal(state: GameState, proposalId: string): GameState 
 /** The other brother said no. The proposal disappears, the board stands. */
 export function rejectProposal(state: GameState, proposalId: string): GameState {
   return { ...state, proposals: state.proposals.filter(x => x.id !== proposalId) };
-}
-
-/**
- * Reset a streak to day zero, keeping the best run for the record. A player
- * who has no run on this habit yet gets one starting today, which is how a
- * streak habit that predates both brothers having it gets picked up.
- */
-export function resetStreak(state: GameState, habitId: string, playerId: Player['id']): GameState {
-  const t = today();
-  if (!state.streaks.some(s => s.habitId === habitId && s.playerId === playerId)) {
-    return { ...state, streaks: [...state.streaks, { habitId, playerId, startedOn: t, best: 0 }] };
-  }
-  const streaks = state.streaks.map(s => {
-    if (s.habitId !== habitId || s.playerId !== playerId) return s;
-    const run = Math.max(
-      0,
-      Math.round((new Date(t + 'T12:00:00').getTime() - new Date(s.startedOn + 'T12:00:00').getTime()) / 86_400_000),
-    );
-    return { ...s, startedOn: t, best: Math.max(s.best, run) };
-  });
-  return { ...state, streaks };
 }
 
 /** Set the price of one unit of a habit that costs money, in pence. */

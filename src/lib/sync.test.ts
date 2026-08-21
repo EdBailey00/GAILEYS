@@ -12,7 +12,6 @@ function base(): GameState {
       { id: 'h-gym', name: 'Gym, 45 minutes', emoji: '', kind: 'weekly', target: 3, xp: 20 },
     ],
     completions: [],
-    streaks: [{ habitId: 'h-dry', playerId: 'p1', startedOn: '2026-08-01', best: 12 }],
     history: [],
     proposals: [],
   };
@@ -64,17 +63,6 @@ describe('diff', () => {
     };
     expect(diff(before, after)).toEqual([
       { t: 'completion.set', habitId: 'h-ket', playerId: 'p1', date: '2026-08-20', count: 1, spentPence: 4000 },
-    ]);
-  });
-
-  test('a reset streak sends the new start and the best kept', () => {
-    const before = base();
-    const after: GameState = {
-      ...before,
-      streaks: [{ habitId: 'h-dry', playerId: 'p1', startedOn: '2026-08-20', best: 19 }],
-    };
-    expect(diff(before, after)).toEqual([
-      { t: 'streak.set', habitId: 'h-dry', playerId: 'p1', startedOn: '2026-08-20', best: 19 },
     ]);
   });
 

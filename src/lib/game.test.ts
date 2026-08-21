@@ -34,7 +34,6 @@ function boardWith(habit: Partial<Habit>, logs: Array<[string, number, number?]>
       count,
       ...(pence === undefined ? {} : { spentPence: pence }),
     })),
-    streaks: [],
     history: [],
     proposals: [],
   };
@@ -124,20 +123,32 @@ describe('spentPence', () => {
   });
 });
 
-describe('weekXp for a clean day', () => {
-  test('pays more for a clean day deep into a run', () => {
-    // Last use 38 days before, so the clean day is past the month mark: x2.
-    const long = boardWith({}, [
+describe('weekXp and the counters', () => {
+  // The counters are not part of the game. A long clean run, a heavy week and
+  // a week nobody touched all score exactly the same: nothing. The point is
+  // that there is never a reason to shade the number you log.
+  test('a clean day scores nothing', () => {
+    const clean = boardWith({}, [
       ['2026-07-10', 1],
       ['2026-08-17', 0],
     ]);
-    // Used on the Sunday, so Monday is day 1: no multiplier.
-    const short = boardWith({}, [
-      ['2026-08-16', 1],
-      ['2026-08-17', 0],
+    expect(weekXp(clean, 'p1', '2026-08-17')).toBe(0);
+  });
+
+  test('logging a use costs nothing either', () => {
+    const heavy = boardWith({}, [
+      ['2026-08-17', 4],
+      ['2026-08-18', 6],
     ]);
-    expect(weekXp(long, 'p1', '2026-08-17', '2026-08-17')).toBe(30);
-    expect(weekXp(short, 'p1', '2026-08-17', '2026-08-17')).toBe(15);
+    expect(weekXp(heavy, 'p1', '2026-08-17')).toBe(0);
+  });
+
+  test('an ordinary habit still scores per tick', () => {
+    const board = boardWith({ id: 'h-gym', kind: 'weekly', target: 3, xp: 20 }, [
+      ['2026-08-17', 1],
+      ['2026-08-19', 1],
+    ]);
+    expect(weekXp(board, 'p1', '2026-08-17')).toBe(40);
   });
 });
 
@@ -163,10 +174,9 @@ describe('dailyCap', () => {
     expect(dailyCap(habit('multi', 3))).toBe(3);
   });
 
-  test('streaks and tallies are not ticked this way', () => {
-    // The tally is a count of what actually happened - capping it would only
-    // make the honest number a lie.
-    expect(dailyCap(habit('streak', 0))).toBe(Infinity);
+  test('a counter is not capped at all', () => {
+    // It is a count of what actually happened - capping it would only make an
+    // honest number a lie.
     expect(dailyCap(habit('tally', 0))).toBe(Infinity);
   });
 });

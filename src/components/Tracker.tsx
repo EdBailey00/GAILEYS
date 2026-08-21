@@ -1,11 +1,12 @@
 'use client';
 
-// Cutting down: the honest card.
+// A counter: the drink, the ciggies, the ket.
 //
-// One log, and every number on this card is read from it: days clean, the
-// best run, and what it has cost. Nothing here needs to be remembered or kept
-// in step with anything else, and logging a use never costs points. That is
-// the deal that makes the number true.
+// One log, and every number on this card is read from it: days since the last
+// one, how many this week, and what it has cost. None of it is worth points
+// and none of it moves the scoreline - that is deliberate. A number you are
+// scored on is a number you have a reason to shade, and these are the ones
+// that have to stay true.
 
 import { useState } from 'react';
 import {
@@ -17,7 +18,7 @@ import {
   lastUseDate,
   money,
   spentPence,
-  streakMultiplier,
+  ticksInWeek,
   ticksOn,
 } from '@/lib/game';
 import { setSpend, setTicks, setUnitCost } from '@/lib/store';
@@ -30,8 +31,6 @@ export function Tracker({
   today,
   monday,
   onChange,
-  onPop,
-  stamped,
 }: {
   state: GameState;
   habit: Habit;
@@ -40,8 +39,6 @@ export function Tracker({
   today: string;
   monday: string;
   onChange: (next: GameState) => void;
-  onPop: (e: React.MouseEvent, text: string) => void;
-  stamped: string | null;
 }) {
   const [editingPrice, setEditingPrice] = useState(false);
   const [price, setPrice] = useState('');
@@ -57,7 +54,7 @@ export function Tracker({
   const run = cleanRun(state, habit.id, who, today);
   const best = bestCleanRun(state, habit.id, who, today);
   const everUsed = lastUseDate(state, habit.id, who) !== null;
-  const cleanValue = Math.round(habit.xp * streakMultiplier(run));
+  const thisWeek = ticksInWeek(state, habit.id, who, monday);
 
   const monthStart = today.slice(0, 8) + '01';
   const week = spentPence(state, habit.id, who, monday, today);
@@ -68,12 +65,6 @@ export function Tracker({
   const add = (n: number) => {
     if (!canTick) return;
     onChange(setTicks(state, habit.id, who, today, Math.max(0, countToday + n)));
-  };
-
-  const declareClean = (e: React.MouseEvent) => {
-    if (!canTick) return;
-    onChange(setTicks(state, habit.id, who, today, 0));
-    onPop(e, `+${cleanValue} clean`);
   };
 
   const savePrice = () => {
@@ -94,10 +85,10 @@ export function Tracker({
 
   return (
     <div
-      className={`rounded-2xl border px-4 py-3 ${stamped === habit.id ? 'stamp' : ''}`}
+      className="rounded-2xl border px-4 py-3"
       style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
     >
-      {/* The headline: how long clean, read from the log itself. */}
+      {/* The headline: how long since the last one, read from the log itself. */}
       <div className="flex items-start gap-3">
         <span className="text-2xl">{habit.emoji}</span>
         <div className="min-w-0 flex-1">
@@ -108,7 +99,7 @@ export function Tracker({
             </div>
           )}
           <div className="font-score mt-1 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-            {everUsed ? 'since the last one' : 'since you started logging'}
+            {everUsed ? 'since the last one' : 'nothing logged yet'}
             {best > run ? ` · best ${best}` : ''}
             {` · ${other.name}: ${cleanRun(state, habit.id, other.id, today)}`}
           </div>
@@ -121,7 +112,7 @@ export function Tracker({
             {run}
           </span>
           <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-            days clean
+            days since
           </span>
         </div>
       </div>
@@ -154,20 +145,12 @@ export function Tracker({
             today
           </span>
         </div>
-        {!loggedToday && canTick && (
-          <button
-            onClick={declareClean}
-            className="font-score rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
-            style={{ borderColor: 'var(--score)', color: 'var(--score)' }}
-          >
-            none today · +{cleanValue}
-          </button>
-        )}
-        {loggedToday && countToday === 0 && (
-          <span className="font-score text-[11px]" style={{ color: 'var(--score)' }}>
-            clean day banked · +{cleanValue}
+        <div className="text-right">
+          <span className="font-score block text-xl font-black leading-none">{thisWeek}</span>
+          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+            this week
           </span>
-        )}
+        </div>
       </div>
 
       {/* What it costs. Plain numbers, no commentary. */}

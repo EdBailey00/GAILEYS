@@ -187,15 +187,14 @@ export function Manage({
             <option value="daily">Daily tick</option>
             <option value="multi">Times a day</option>
             <option value="weekly">Times a week</option>
-            <option value="streak">Days without</option>
-            <option value="tally">Cutting down</option>
+            <option value="tally">A counter (cutting down)</option>
           </select>
           <input
             type="number"
             min={1}
             value={target}
             onChange={e => setTarget(Number(e.target.value))}
-            disabled={kind === 'daily' || kind === 'streak' || kind === 'tally'}
+            disabled={kind === 'daily' || kind === 'tally'}
             aria-label="Target"
             className="rounded-xl border px-3 py-2 text-sm disabled:opacity-40"
             style={inputStyle}
@@ -299,7 +298,7 @@ export function Manage({
                   min={1}
                   value={editing.target}
                   onChange={e => setEditing({ ...editing, target: Number(e.target.value) })}
-                  disabled={editing.kind === 'daily' || editing.kind === 'streak' || editing.kind === 'tally'}
+                  disabled={editing.kind === 'daily' || editing.kind === 'tally'}
                   className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:opacity-40"
                   style={inputStyle}
                 />

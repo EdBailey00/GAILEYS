@@ -7,8 +7,7 @@ export type HabitKind =
   | 'daily' // one tick a day (dishes done, cooked dinner)
   | 'multi' // several ticks a day (3 meals = target 3)
   | 'weekly' // target per week (gym x3, 5km x1)
-  | 'streak' // count-up days (days without beer), resettable, worth more the longer it runs
-  | 'tally'; // counting a habit you are cutting down (ciggies) - logging is honest, zero days score
+  | 'tally'; // a counter: the drink, the ciggies, the ket. Scores nothing, ever.
 
 export interface Habit {
   id: string;
@@ -23,7 +22,7 @@ export interface Habit {
   kind: HabitKind;
   /** multi: ticks per day. weekly: times per week. Others ignore it. */
   target: number;
-  /** XP per tick (daily/multi/weekly) or per held day (streak). */
+  /** XP per tick. Counters ignore it: they are not part of the scoring. */
   xp: number;
   /**
    * Tally habits that cost money: the price of one unit, in pence. Set it and
@@ -49,16 +48,6 @@ export interface Completion {
   count: number;
   /** What was actually spent that day, when it differs from count x unitCost. */
   spentPence?: number;
-}
-
-/** A running count-up streak. Reset = new startedOn (history keeps the best). */
-export interface StreakState {
-  habitId: string;
-  playerId: Player['id'];
-  /** YYYY-MM-DD the current run started. */
-  startedOn: string;
-  /** Longest run ever, in days, for the bragging. */
-  best: number;
 }
 
 export interface WeekResult {
@@ -89,7 +78,6 @@ export interface GameState {
   players: [Player, Player];
   habits: Habit[];
   completions: Completion[];
-  streaks: StreakState[];
   /** Sealed results of past weeks - the bragging-rights ledger. */
   history: WeekResult[];
   /** Shared-board changes awaiting the other player's yes. */
@@ -126,10 +114,10 @@ export function weekDates(monday: string): string[] {
   return out;
 }
 
-/** Whole days from startedOn to today (day 0 = started today). */
-export function streakDays(startedOn: string, todayKey: string): number {
-  const a = new Date(startedOn + 'T12:00:00').getTime();
-  const b = new Date(todayKey + 'T12:00:00').getTime();
+/** Whole days between two dates (same day = 0). */
+export function daysBetween(from: string, to: string): number {
+  const a = new Date(from + 'T12:00:00').getTime();
+  const b = new Date(to + 'T12:00:00').getTime();
   return Math.max(0, Math.round((b - a) / 86_400_000));
 }
 
@@ -138,8 +126,8 @@ export function streakDays(startedOn: string, todayKey: string): number {
  *
  * A weekly target is a thing you do once in a day and no more: gym x3 is
  * three days in the week, not three taps in one afternoon. Multi habits say
- * how many a day they mean (three meals), daily habits mean one, and streaks
- * and tallies are not ticked this way at all.
+ * how many a day they mean (three meals), daily habits mean one, and a
+ * counter is however many it actually was.
  */
 export function dailyCap(habit: Habit): number {
   switch (habit.kind) {
@@ -149,6 +137,8 @@ export function dailyCap(habit: Habit): number {
     case 'weekly':
       return 1;
     default:
+      // A counter records what actually happened. Capping it would only make
+      // an honest number a lie.
       return Infinity;
   }
 }
@@ -169,15 +159,12 @@ export function ticksInWeek(state: GameState, habitId: string, playerId: Player[
     .reduce((n, c) => n + c.count, 0);
 }
 
-export function streakFor(state: GameState, habitId: string, playerId: Player['id']): StreakState | undefined {
-  return state.streaks.find(s => s.habitId === habitId && s.playerId === playerId);
-}
-
-// --- cutting down: clean runs and what it costs --------------------------------
+// --- the counters: days since, how many, what it cost -------------------------
 //
-// A tally habit is the honest record of something you are cutting down. Every
-// number below is read from that one log, so there is no second thing to keep
-// in step with it and nothing to remember to press.
+// A counter is the honest record of something you are cutting down - the
+// drink, the ciggies, the ket. Every number below is read from that one log,
+// so there is no second thing to keep in step with it and nothing to remember
+// to press, and none of it touches the scoreboard.
 
 /** Days this player logged a use of this habit, oldest first. */
 function daysUsed(state: GameState, habitId: string, playerId: Player['id']): string[] {
@@ -213,9 +200,9 @@ export function cleanRunOn(
   dateKey: string,
 ): number {
   const uses = daysUsed(state, habitId, playerId).filter(d => d <= dateKey);
-  if (uses.length > 0) return streakDays(uses[uses.length - 1], dateKey);
+  if (uses.length > 0) return daysBetween(uses[uses.length - 1], dateKey);
   const logs = logDates(state, habitId, playerId).filter(d => d <= dateKey);
-  return logs.length > 0 ? streakDays(logs[0], dateKey) : 0;
+  return logs.length > 0 ? daysBetween(logs[0], dateKey) : 0;
 }
 
 /** Days clean right now. */
@@ -241,11 +228,11 @@ export function bestCleanRun(
   const uses = daysUsed(state, habitId, playerId);
   if (uses.length === 0) return cleanRunOn(state, habitId, playerId, todayKey);
   const logs = logDates(state, habitId, playerId);
-  let best = streakDays(logs[0], uses[0]); // the run before the first use
+  let best = daysBetween(logs[0], uses[0]); // the run before the first use
   for (let i = 1; i < uses.length; i++) {
-    best = Math.max(best, streakDays(uses[i - 1], uses[i]));
+    best = Math.max(best, daysBetween(uses[i - 1], uses[i]));
   }
-  return Math.max(best, streakDays(uses[uses.length - 1], todayKey));
+  return Math.max(best, daysBetween(uses[uses.length - 1], todayKey));
 }
 
 /**
@@ -281,23 +268,14 @@ export function money(pence: number): string {
 // --- XP ----------------------------------------------------------------------
 
 /**
- * Streaks are worth more the longer they run - the whole point of a hard-won
- * day 40 is that it beats a day 4. Multiplier by days held:
- * under a week 1x, then 1.5x, a month 2x, a hundred days 3x.
+ * A player's XP earned inside one week: every tick at its habit's rate.
+ *
+ * Counters are not in here at all, by design. Days clean and how many you
+ * have had this week are facts about you, not moves in a game against your
+ * brother, and mixing the two makes both of them worse: it turns an honest
+ * log into something with a score riding on it.
  */
-export function streakMultiplier(days: number): number {
-  if (days >= 100) return 3;
-  if (days >= 30) return 2;
-  if (days >= 7) return 1.5;
-  return 1;
-}
-
-/**
- * A player's XP earned inside one week: every tick at its habit's rate; each
- * held streak day at its escalating rate; and for tally habits, a zero-day
- * bonus - logging the number is always safe, a clean day scores.
- */
-export function weekXp(state: GameState, playerId: Player['id'], monday: string, todayKey: string): number {
+export function weekXp(state: GameState, playerId: Player['id'], monday: string): number {
   const days = new Set(weekDates(monday));
   let xp = 0;
   for (const c of state.completions) {
@@ -310,37 +288,7 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
     }
     const habit = state.habits.find(h => h.id === c.habitId);
     if (!habit) continue;
-    // Tally counts are the thing being cut down - they never earn per tick.
     if (habit.kind !== 'tally') xp += habit.xp * c.count;
-  }
-  for (const s of state.streaks) {
-    if (s.playerId !== playerId) continue;
-    const habit = state.habits.find(h => h.id === s.habitId);
-    if (!habit || habit.kind !== 'streak' || habit.archived) continue;
-    // Days of this run that fall inside this week, up to today, each at the
-    // rate the streak had reached on that day.
-    for (const d of weekDates(monday)) {
-      if (d > todayKey) break;
-      const held = streakDays(s.startedOn, d);
-      if (d >= s.startedOn && held > 0) xp += Math.round(habit.xp * streakMultiplier(held));
-    }
-  }
-  // Tally zero-days: a day DECLARED clean (a zero log exists) earns the
-  // habit's xp once. Days never logged earn nothing either way - the bonus
-  // rewards the declaration, and unopened apps are not mistaken for clean days.
-  for (const habit of state.habits) {
-    if (habit.kind !== 'tally' || habit.archived) continue;
-    for (const d of weekDates(monday)) {
-      if (d > todayKey) break;
-      const log = state.completions.find(
-        c => c.habitId === habit.id && c.playerId === playerId && c.date === d,
-      );
-      // A clean day deep into a run is worth more than a clean day on day one,
-      // on the same escalating scale the streaks use.
-      if (log && log.count === 0) {
-        xp += Math.round(habit.xp * streakMultiplier(cleanRunOn(state, habit.id, playerId, d)));
-      }
-    }
   }
   return xp;
 }
@@ -348,7 +296,7 @@ export function weekXp(state: GameState, playerId: Player['id'], monday: string,
 /** All-time XP: sealed weeks plus the current one. */
 export function totalXp(state: GameState, playerId: Player['id'], todayKey: string): number {
   const sealed = state.history.reduce((n, w) => n + (playerId === 'p1' ? w.p1 : w.p2), 0);
-  return sealed + weekXp(state, playerId, weekOf(todayKey), todayKey);
+  return sealed + weekXp(state, playerId, weekOf(todayKey));
 }
 
 /**
@@ -365,13 +313,6 @@ export function levelFor(xp: number): { level: number; into: number; needed: num
     level += 1;
   }
   return { level, into: remaining, needed: threshold };
-}
-
-/** Streak milestones worth shouting about. */
-export const MILESTONES = [3, 7, 14, 30, 50, 100, 200, 365];
-
-export function nextMilestone(days: number): number | null {
-  return MILESTONES.find(m => m > days) ?? null;
 }
 
 // --- weekly challenges -------------------------------------------------------
