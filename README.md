@@ -53,8 +53,14 @@ never an argument about whether it counted.
 
 ### The counters
 
-The drink, the ciggies and the ket live behind the second tab, and they are
-not part of the game at all. Two numbers each:
+Three big circles sit on the board itself, under the scoreline. One tap is
+one more, which is the whole point: the moment you log one is the moment you
+are reaching for it, so it has to be doable in a second with one thumb. A
+second tap under the circle takes it back.
+
+Everything you might want to *read* about them is on the counters page, since
+none of it is what you need while you are lighting one. They are not part of
+the game at all. Two numbers each:
 
 - **days since** the last one
 - **how many this week**
@@ -68,6 +74,34 @@ None of it scores, and that is the point. A number you are scored on is a
 number you have a reason to shade, and these are the ones that have to stay
 true. Logging four ciggies costs nothing and a clean fortnight earns nothing;
 the scoreline at the top is untouched either way.
+
+Money is opt-in per counter and smoking has no price on it, so the cigarettes
+carry no cost anywhere: not on the card, not in the stats, not in the totals.
+Only counters with a price are in the money at all.
+
+### Stats
+
+The long view, all of it read from rows the board already keeps: weeks won
+head to head, every week's score as a chart, your best week, what the priced
+counters have cost this week, month and year, and per counter how many a week
+you are having, how long since the last one and the longest you have gone.
+
+"Saved" is measured against the worst week you actually had, because money
+saved against a rate nobody ever agreed to is a made-up number.
+
+The charts are hand-drawn svg. Three bars and an axis do not need a charting
+library, and the app has to work in a basement with no signal.
+
+### Chat
+
+Two brothers, one thread, live. Deliberately outside the board's sync: the
+board is absolute values that can be replayed safely after a tunnel, and a
+message is a thing said once - replaying it would say it twice. So a message
+that fails to send stays in the box for you to try again.
+
+It needs a `messages` table, which the app is not allowed to create and nor
+should it be. Open the chat tab and it prints the SQL to run in the Supabase
+project, with a button to copy it.
 
 ## Working on it
 
@@ -86,6 +120,8 @@ The layers, smallest first:
 | File | Job |
 |---|---|
 | `src/lib/game.ts` | the rules: XP, weeks, the counters, money. Pure |
+| `src/lib/stats.ts` | what it all adds up to over time. Pure |
+| `src/lib/chat.ts` | the thread. Its own sync, for good reason |
 | `src/lib/store.ts` | this phone's copy, and every change as a pure function |
 | `src/lib/sync.ts` | what changed, and the outbox that survives no signal |
 | `src/lib/remote.ts` | rows in, rows out. The only file that knows SQL exists |

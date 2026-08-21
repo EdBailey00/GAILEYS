@@ -101,7 +101,10 @@ export function UpdateBanner() {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
+    <div
+      className="fixed inset-x-0 z-40 px-4"
+      style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
+    >
       <div
         className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border px-4 py-3 shadow-lg"
         style={{ borderColor: 'var(--score)', background: 'var(--board-raised)' }}

@@ -25,8 +25,12 @@ import {
 } from '@/lib/game';
 import { acceptProposal, rejectProposal, setTicks, unclaimChallenge, untickWeek } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
+import { useChat } from '@/lib/chat';
 import { ChooseBrother } from '@/components/Gate';
-import { Tracker } from '@/components/Tracker';
+import { Chat } from '@/components/Chat';
+import { CounterCircles, CountersPage } from '@/components/Counters';
+import { Nav, type View } from '@/components/Nav';
+import { Stats } from '@/components/Stats';
 import { Manage, SectionTitle } from '@/components/Manage';
 import { UpdateBanner } from '@/components/Update';
 import { VERSION } from '@/lib/version';
@@ -42,11 +46,13 @@ interface FloatScore {
 export default function Page() {
   const board = useBoard();
   const { state, update } = board;
+  const chat = useChat(board.me);
   // Which board is on screen. It starts on yours and you can look at your
   // brother's, but only your own has anything you can tap.
   const [viewing, setViewing] = useState<Player['id'] | null>(null);
-  // The board, or the tally. Two different jobs, so two tabs.
-  const [tab, setTab] = useState<'board' | 'cutting'>('board');
+  // Four places to be: the board, the counters in full, the long view, and
+  // the thread.
+  const [view, setView] = useState<View>('board');
   const [manage, setManage] = useState(false);
   const [floats, setFloats] = useState<FloatScore[]>([]);
   const [stamped, setStamped] = useState<string | null>(null);
@@ -144,6 +150,7 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-md px-4 pb-28 pt-4" style={{ minHeight: '100dvh' }}>
       {/* ---- The week, and the tug of war ---------------------------------- */}
+      {view === 'board' && (
       <header>
         <div className="font-score flex items-baseline justify-between text-[11px] uppercase tracking-[0.18em]" style={{ color: 'var(--chalk-dim)' }}>
           <span>Week of {new Date(monday + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
@@ -176,8 +183,10 @@ export default function Page() {
         </div>
         <p className="mt-2 text-center text-sm" style={{ color: 'var(--chalk-dim)' }}>{leadLine}</p>
       </header>
+      )}
 
       {/* ---- Whose board ---------------------------------------------------- */}
+      {view !== 'chat' && (
       <div className="mt-5 flex overflow-hidden rounded-xl border" style={{ borderColor: 'var(--dust)' }}>
         {state.players.map(p => (
           <button
@@ -194,8 +203,10 @@ export default function Page() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Level line for whoever is ticking */}
+      {view !== 'chat' && (
       <div className="mt-2 flex items-center gap-3 px-1">
         <span className="font-score text-xs font-bold whitespace-nowrap" style={{ color: me.colour }}>
           LV {level.level}
@@ -207,32 +218,23 @@ export default function Page() {
           {level.into}/{level.needed}
         </span>
       </div>
+      )}
 
-      {/* ---- Which half of the app ------------------------------------------ */}
-      {/* The tally is its own tab. It is not a habit you are trying to do more
-          of, the numbers on it are read differently, and it should not be the
-          thing you scroll past on the way to ticking the dishes off. */}
-      <div className="mt-3 flex overflow-hidden rounded-xl border text-sm" style={{ borderColor: 'var(--dust)' }}>
-        {([
-          ['board', 'The board'],
-          ['cutting', 'Cutting down'],
-        ] as const).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className="flex-1 py-2.5 font-bold uppercase tracking-wide transition-colors"
-            style={
-              tab === id
-                ? { background: 'var(--chalk)', color: 'var(--board)' }
-                : { background: 'transparent', color: 'var(--chalk-dim)' }
-            }
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* ---- The counters, one tap each -------------------------------------- */}
+      {view === 'board' && (
+        <CounterCircles
+          state={state}
+          counters={counters}
+          who={who}
+          canTick={canTick}
+          today={t}
+          onChange={update}
+          onPop={pop}
+          onOpen={() => setView('counters')}
+        />
+      )}
 
-      {tab === 'board' && (
+      {view === 'board' && (
         <>
         {/* ---- Changes waiting on this player's yes ---------------------------- */}
         {state.proposals.filter(p => p.by !== who).length > 0 && (
@@ -499,34 +501,26 @@ export default function Page() {
         </>
       )}
 
-      {/* ---- Cutting down: its own tab, because it is its own thing ------- */}
-      {tab === 'cutting' && (
-        <div className="mt-4">
-          {counters.length === 0 ? (
-            <p className="text-sm leading-snug" style={{ color: 'var(--chalk-dim)' }}>
-              No counters yet. Add one under players &amp; habits, as a counter,
-              and it lands here.
-            </p>
-          ) : (
-            <div className="space-y-2">
-            {counters.map(habit => (
-              <Tracker
-                key={habit.id}
-                state={state}
-                habit={habit}
-                who={who}
-                canTick={canTick}
-                today={t}
-                monday={monday}
-                onChange={update}
-              />
-            ))}
-            </div>
-          )}
-        </div>
+      {view === 'counters' && (
+        <CountersPage
+          state={state}
+          counters={counters}
+          who={who}
+          canTick={canTick}
+          today={t}
+          monday={monday}
+          onChange={update}
+        />
       )}
 
+      {view === 'stats' && (
+        <Stats state={state} who={who} today={t} monday={monday} counters={counters} />
+      )}
+
+      {view === 'chat' && <Chat chat={chat} state={state} me={board.me} />}
+
       {/* ---- Where things stand ---------------------------------------------- */}
+      {view !== 'chat' && (
       <div className="mt-6 space-y-1 text-center">
         {!canTick && (
           <p className="text-xs" style={{ color: 'var(--chalk-dim)' }}>
@@ -544,8 +538,10 @@ export default function Page() {
           </p>
         )}
       </div>
+      )}
 
       {/* ---- Manage ---------------------------------------------------------- */}
+      {view !== 'chat' && (
       <div className="mt-8 text-center">
         <button
           onClick={() => setManage(m => !m)}
@@ -558,7 +554,8 @@ export default function Page() {
           {VERSION}
         </div>
       </div>
-      {manage && (
+      )}
+      {manage && view !== 'chat' && (
         <Manage
           state={state}
           who={who}
@@ -569,6 +566,7 @@ export default function Page() {
         />
       )}
 
+      <Nav view={view} onGo={setView} unread={chat.unread} />
       <UpdateBanner />
 
       {/* Floating scores */}

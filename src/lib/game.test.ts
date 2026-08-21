@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { sealPastWeeks } from './store';
 import {
   type GameState,
   type Habit,
@@ -178,5 +179,37 @@ describe('dailyCap', () => {
     // It is a count of what actually happened - capping it would only make an
     // honest number a lie.
     expect(dailyCap(habit('tally', 0))).toBe(Infinity);
+  });
+});
+
+describe('sealing a finished week', () => {
+  const board = (completions: GameState['completions'], history: GameState['history'] = []): GameState => ({
+    players: [
+      { id: 'p1', name: 'ED', emoji: '', colour: '#000' },
+      { id: 'p2', name: 'ALFIE', emoji: '', colour: '#fff' },
+    ],
+    habits: [
+      { id: 'h-gym', name: 'Gym', emoji: '', kind: 'weekly', target: 3, xp: 20 },
+      { id: 'h-ciggies', name: 'Ciggies', emoji: '', kind: 'tally', target: 0, xp: 10 },
+    ],
+    completions,
+    history,
+    proposals: [],
+  });
+
+  test('a week where only a counter was logged does not become a 0-0 draw', () => {
+    // Counters score nothing, so this week has no result to seal. Left in, it
+    // would show up in the ledger as a draw neither of them played.
+    const state = sealPastWeeks(
+      board([{ habitId: 'h-ciggies', playerId: 'p1', date: '2020-01-06', count: 9 }]),
+    );
+    expect(state.history).toEqual([]);
+  });
+
+  test('a week somebody actually scored in is still sealed', () => {
+    const state = sealPastWeeks(
+      board([{ habitId: 'h-gym', playerId: 'p1', date: '2020-01-06', count: 2 }]),
+    );
+    expect(state.history).toEqual([{ weekOf: '2020-01-06', p1: 40, p2: 0 }]);
   });
 });

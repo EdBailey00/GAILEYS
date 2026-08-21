@@ -168,10 +168,10 @@ export function Tracker({
             <button
               onClick={() => setEditingPrice(true)}
               disabled={!canTick}
-              className="font-score text-[11px] underline-offset-2 hover:underline disabled:opacity-30"
+              className="font-score text-[10px] underline-offset-2 hover:underline disabled:opacity-30"
               style={{ color: 'var(--chalk-dim)' }}
             >
-              set a price and this starts counting the money
+              + add a price
             </button>
           )
         ) : editingPrice ? (

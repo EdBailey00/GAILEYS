@@ -76,11 +76,14 @@ export function sealPastWeeks(state: GameState): GameState {
   if (mondaysWithPlay.size === 0) return state;
   const history = [...state.history];
   for (const monday of [...mondaysWithPlay].sort()) {
-    history.push({
-      weekOf: monday,
-      p1: weekXp(state, 'p1', monday),
-      p2: weekXp(state, 'p2', monday),
-    });
+    const p1 = weekXp(state, 'p1', monday);
+    const p2 = weekXp(state, 'p2', monday);
+    // A week nobody scored in is not a draw, it is a week nobody played. It
+    // would otherwise land in the ledger as 0-0 and count as an honours-even
+    // week in the record, which is exactly wrong: logging a ciggie and
+    // nothing else is not a tie.
+    if (p1 === 0 && p2 === 0) continue;
+    history.push({ weekOf: monday, p1, p2 });
   }
   return { ...state, history };
 }
