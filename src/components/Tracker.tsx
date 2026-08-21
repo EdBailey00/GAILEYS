@@ -15,7 +15,6 @@ import {
   type Player,
   bestCleanRun,
   cleanRun,
-  lastUseDate,
   money,
   spentPence,
   ticksInWeek,
@@ -55,7 +54,6 @@ export function Tracker({
   );
   const run = cleanRun(state, habit.id, who, today);
   const best = bestCleanRun(state, habit.id, who, today);
-  const everUsed = lastUseDate(state, habit.id, who) !== null;
   const thisWeek = ticksInWeek(state, habit.id, who, monday);
   // A counter nobody has pressed knows nothing, and a confident '0 days since'
   // would be a lie rather than a blank. Once the last one is named - by
@@ -104,7 +102,7 @@ export function Tracker({
       className="rounded-2xl border px-4 py-3"
       style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
     >
-      {/* The headline: how long since the last one, read from the log itself. */}
+      {/* What it is: the name, and then the thing you came here to press. */}
       <div className="flex items-start gap-3">
         <span className="text-2xl">{habit.emoji}</span>
         <div className="min-w-0 flex-1">
@@ -114,29 +112,76 @@ export function Tracker({
               {habit.detail}
             </div>
           )}
-          <div className="font-score mt-1 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-            {everUsed ? 'since the last one' : anythingLogged ? 'since you started logging' : 'not counting yet'}
-            {best > run ? ` · best ${best}` : ''}
-            {` · ${other.name}: ${cleanRun(state, habit.id, other.id, today)}`}
-          </div>
         </div>
-        <div className="text-right">
+      </div>
+
+      {/* The intake. This is what a counter is for, so it goes first and it is
+          the biggest thing on the card. Everything under it is a consequence. */}
+      <div className="mt-3 flex items-center justify-center gap-4">
+        <button
+          onClick={() => add(-1)}
+          disabled={!canTick}
+          aria-label={`One less ${habit.name} today`}
+          className="h-11 w-11 rounded-full border text-xl font-bold disabled:opacity-30"
+          style={{ borderColor: 'var(--dust)' }}
+        >
+          −
+        </button>
+        <span className="text-center">
           <span
-            className="font-score block text-3xl font-black leading-none"
+            className="font-score block text-4xl font-black leading-none"
             style={{ color: me.colour, transform: 'rotate(-1.5deg)' }}
           >
+            {loggedToday ? countToday : '·'}
+          </span>
+          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+            today
+          </span>
+        </span>
+        <button
+          onClick={() => add(1)}
+          disabled={!canTick}
+          aria-label={`One more ${habit.name} today`}
+          className="h-11 w-11 rounded-full border text-xl font-bold disabled:opacity-30"
+          style={{ borderColor: 'var(--dust)' }}
+        >
+          +
+        </button>
+      </div>
+
+      {/* Then what that adds up to. */}
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t pt-3 text-center" style={{ borderColor: 'var(--dust)' }}>
+        <span>
+          <span className="font-score block text-xl font-black leading-none">
             {anythingLogged ? run : '–'}
           </span>
           <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
             days since
           </span>
-        </div>
+        </span>
+        <span>
+          <span className="font-score block text-xl font-black leading-none">{thisWeek}</span>
+          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+            this week
+          </span>
+        </span>
+        <span>
+          <span className="font-score block text-xl font-black leading-none">
+            {anythingLogged ? best : '–'}
+          </span>
+          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+            best run
+          </span>
+        </span>
+      </div>
+      <div className="font-score mt-1.5 text-center text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+        {other.name}: {cleanRun(state, habit.id, other.id, today)} days since
       </div>
 
       {/* Naming the last one, for a counter you have not had to press yet. */}
       {canTick &&
         (editingLast ? (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center justify-center gap-2">
             <label className="font-score text-[10px] uppercase tracking-[0.14em]" style={{ color: 'var(--chalk-dim)' }}>
               last one
             </label>
@@ -165,50 +210,16 @@ export function Tracker({
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => setEditingLast(true)}
-            className="font-score mt-1.5 text-[11px] underline-offset-2 hover:underline"
-            style={{ color: anythingLogged ? 'var(--chalk-dim)' : 'var(--score)' }}
-          >
-            {anythingLogged ? 'set when the last one was' : 'when was the last one?'}
-          </button>
+          <div className="text-center">
+            <button
+              onClick={() => setEditingLast(true)}
+              className="font-score mt-1.5 text-[11px] underline-offset-2 hover:underline"
+              style={{ color: anythingLogged ? 'var(--chalk-dim)' : 'var(--score)' }}
+            >
+              {anythingLogged ? 'set when the last one was' : 'when was the last one?'}
+            </button>
+          </div>
         ))}
-
-      {/* Today's log. Counting up never costs points. */}
-      <div className="mt-3 flex items-center justify-between border-t pt-3" style={{ borderColor: 'var(--dust)' }}>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => add(-1)}
-            disabled={!canTick}
-            aria-label={`One less ${habit.name} today`}
-            className="h-9 w-9 rounded-full border text-lg font-bold disabled:opacity-30"
-            style={{ borderColor: 'var(--dust)' }}
-          >
-            −
-          </button>
-          <span className="font-score w-8 text-center text-2xl font-black" style={{ transform: 'rotate(-1.5deg)' }}>
-            {loggedToday ? countToday : '·'}
-          </span>
-          <button
-            onClick={() => add(1)}
-            disabled={!canTick}
-            aria-label={`One more ${habit.name} today`}
-            className="h-9 w-9 rounded-full border text-lg font-bold disabled:opacity-30"
-            style={{ borderColor: 'var(--dust)' }}
-          >
-            +
-          </button>
-          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-            today
-          </span>
-        </div>
-        <div className="text-right">
-          <span className="font-score block text-xl font-black leading-none">{thisWeek}</span>
-          <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-            this week
-          </span>
-        </div>
-      </div>
 
       {/* What it costs. Plain numbers, no commentary. */}
       <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--dust)' }}>
