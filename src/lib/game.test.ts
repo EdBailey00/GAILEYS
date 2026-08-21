@@ -4,6 +4,7 @@ import {
   type Habit,
   bestCleanRun,
   cleanRun,
+  dailyCap,
   lastUseDate,
   spentPence,
   weekXp,
@@ -137,5 +138,35 @@ describe('weekXp for a clean day', () => {
     ]);
     expect(weekXp(long, 'p1', '2026-08-17', '2026-08-17')).toBe(30);
     expect(weekXp(short, 'p1', '2026-08-17', '2026-08-17')).toBe(15);
+  });
+});
+
+
+describe('dailyCap', () => {
+  const habit = (kind: Habit['kind'], target: number): Habit => ({
+    id: 'h',
+    name: 'Gym x3',
+    emoji: '',
+    kind,
+    target,
+    xp: 20,
+  });
+
+  test('a weekly target is once a day, however many the week asks for', () => {
+    // Three gym sessions is three days, not three taps this afternoon.
+    expect(dailyCap(habit('weekly', 3))).toBe(1);
+    expect(dailyCap(habit('weekly', 1))).toBe(1);
+  });
+
+  test('a daily tick is once, and a multi is as many as it says', () => {
+    expect(dailyCap(habit('daily', 1))).toBe(1);
+    expect(dailyCap(habit('multi', 3))).toBe(3);
+  });
+
+  test('streaks and tallies are not ticked this way', () => {
+    // The tally is a count of what actually happened - capping it would only
+    // make the honest number a lie.
+    expect(dailyCap(habit('streak', 0))).toBe(Infinity);
+    expect(dailyCap(habit('tally', 0))).toBe(Infinity);
   });
 });

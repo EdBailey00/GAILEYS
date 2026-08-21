@@ -14,6 +14,7 @@ import {
   challengeClaimed,
   challengeKey,
   challengesFor,
+  dailyCap,
   levelFor,
   nextMilestone,
   streakDays,
@@ -119,7 +120,7 @@ export default function Page() {
   const tick = (e: React.MouseEvent, habit: Habit) => {
     if (!canTick) return;
     const now = ticksOn(state, habit.id, who, t);
-    const cap = habit.kind === 'multi' ? habit.target : habit.kind === 'daily' ? 1 : Infinity;
+    const cap = dailyCap(habit);
     if (habit.kind === 'daily' && now >= 1) {
       update(setTicks(state, habit.id, who, t, 0)); // undo a mis-tap
       return;
@@ -130,9 +131,16 @@ export default function Page() {
     pop(e, `+${habit.xp}`);
   };
 
+  // A weekly target is once a day and no more - nobody goes to the gym four
+  // times before lunch. A second tap on a day already ticked takes it back,
+  // which is the same way a daily habit undoes a mis-tap.
   const weeklyTick = (e: React.MouseEvent, habit: Habit) => {
     if (!canTick) return;
-    update(setTicks(state, habit.id, who, t, ticksOn(state, habit.id, who, t) + 1));
+    if (ticksOn(state, habit.id, who, t) >= dailyCap(habit)) {
+      update(setTicks(state, habit.id, who, t, 0));
+      return;
+    }
+    update(setTicks(state, habit.id, who, t, 1));
     stamp(habit.id);
     pop(e, `+${habit.xp}`);
   };
@@ -365,6 +373,7 @@ export default function Page() {
             const mine = ticksInWeek(state, habit.id, who, monday);
             const others = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
             const done = mine >= habit.target;
+            const doneToday = ticksOn(state, habit.id, who, t) > 0;
             return (
               <div
                 key={habit.id}
@@ -385,6 +394,11 @@ export default function Page() {
                       {habit.detail}
                     </span>
                   )}
+                  {doneToday && (
+                    <span className="font-score mt-0.5 block text-[10px]" style={{ color: 'var(--score)' }}>
+                      done today · tap to undo
+                    </span>
+                  )}
                   <span className="mt-1.5 flex gap-1">
                     {Array.from({ length: Math.max(habit.target, mine) }, (_, i) => (
                       <span
@@ -394,7 +408,7 @@ export default function Page() {
                       />
                     ))}
                   </span>
-                  {mine > 0 && (
+                  {mine > 0 && !doneToday && (
                     <button
                       onClick={e => {
                         e.stopPropagation();
@@ -403,7 +417,7 @@ export default function Page() {
                       className="font-score mt-1 text-[10px] underline-offset-2 hover:underline"
                       style={{ color: 'var(--chalk-dim)' }}
                     >
-                      − take one back
+                      − take an earlier day back
                     </button>
                   )}
                 </span>

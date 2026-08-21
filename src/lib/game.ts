@@ -133,6 +133,26 @@ export function streakDays(startedOn: string, todayKey: string): number {
   return Math.max(0, Math.round((b - a) / 86_400_000));
 }
 
+/**
+ * How many times a habit can honestly be ticked in one day.
+ *
+ * A weekly target is a thing you do once in a day and no more: gym x3 is
+ * three days in the week, not three taps in one afternoon. Multi habits say
+ * how many a day they mean (three meals), daily habits mean one, and streaks
+ * and tallies are not ticked this way at all.
+ */
+export function dailyCap(habit: Habit): number {
+  switch (habit.kind) {
+    case 'multi':
+      return habit.target;
+    case 'daily':
+    case 'weekly':
+      return 1;
+    default:
+      return Infinity;
+  }
+}
+
 // --- lookups -----------------------------------------------------------------
 
 export function ticksOn(state: GameState, habitId: string, playerId: Player['id'], date: string): number {
