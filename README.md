@@ -17,8 +17,11 @@ on any phone, which is the route for an iPhone.
 There is no sign-in. Open it, tap your name once, and you are on the board.
 The phone remembers; both phones read and write the same board, live.
 
-You can look at your brother's board, but only your own has anything you can
-tap, so nobody fat-fingers a gym session onto the wrong side. Which brother a
+Both brothers carry exactly the same habits. There is no such thing as a
+habit of your own: whatever goes on the board goes on both sides, which is the
+only way the scoreline means anything. You can look at your brother's board,
+but only your own has anything you can tap, so nobody fat-fingers a gym
+session onto the wrong side. Which brother a
 phone belongs to is a setting, not a password: this is a scoreboard for two
 people who share a kitchen and it is deliberately built as one.
 
@@ -42,9 +45,9 @@ a flat battery safe rather than a guess.
 - **The hard-won days**: count-up streaks, worth more the longer they run:
   x1.5 after a week, x2 after a month, x3 after a hundred days. Resetting is
   honest and keeps your best run.
-- **Cutting down**: the tally card. Logging a use never costs points and a
-  declared clean day scores, on the same escalating scale, so a clean day on
-  day 40 is worth more than one on day 4.
+- **Cutting down**: its own tab, not part of the board. Logging a use never
+  costs points and a declared clean day scores, on the same escalating scale,
+  so a clean day on day 40 is worth more than one on day 4.
 - Sealed weeks land in the ledger at the bottom - the permanent record.
 
 Every habit is definitive. "Drink 2L water", not "drank water": each one names
@@ -52,6 +55,11 @@ a number or an unambiguous finish line, with the detail underneath, so there is
 never an argument about whether it counted.
 
 ### The tracker
+
+The beer, the ciggies and the ket live behind the second tab, away from the
+ticking. They are not habits you are trying to do more of, their numbers read
+the other way round, and they should not be the thing you scroll past on the
+way to ticking the dishes off.
 
 A tally habit given a price becomes a proper tracker: days clean, the longest
 clean run ever held, and what it has cost this week, this month and all time.

@@ -110,7 +110,7 @@ export function Tracker({
           <div className="font-score mt-1 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
             {everUsed ? 'since the last one' : 'since you started logging'}
             {best > run ? ` · best ${best}` : ''}
-            {!habit.owner && ` · ${other.name}: ${cleanRun(state, habit.id, other.id, today)}`}
+            {` · ${other.name}: ${cleanRun(state, habit.id, other.id, today)}`}
           </div>
         </div>
         <div className="text-right">

@@ -221,9 +221,16 @@ export function rejectProposal(state: GameState, proposalId: string): GameState 
   return { ...state, proposals: state.proposals.filter(x => x.id !== proposalId) };
 }
 
-/** Reset a streak to day zero, keeping the best run for the record. */
+/**
+ * Reset a streak to day zero, keeping the best run for the record. A player
+ * who has no run on this habit yet gets one starting today, which is how a
+ * streak habit that predates both brothers having it gets picked up.
+ */
 export function resetStreak(state: GameState, habitId: string, playerId: Player['id']): GameState {
   const t = today();
+  if (!state.streaks.some(s => s.habitId === habitId && s.playerId === playerId)) {
+    return { ...state, streaks: [...state.streaks, { habitId, playerId, startedOn: t, best: 0 }] };
+  }
   const streaks = state.streaks.map(s => {
     if (s.habitId !== habitId || s.playerId !== playerId) return s;
     const run = Math.max(

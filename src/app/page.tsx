@@ -53,6 +53,8 @@ export default function Page() {
   // Which board is on screen. It starts on yours and you can look at your
   // brother's, but only your own has anything you can tap.
   const [viewing, setViewing] = useState<Player['id'] | null>(null);
+  // The board, or the tally. Two different jobs, so two tabs.
+  const [tab, setTab] = useState<'board' | 'cutting'>('board');
   const [manage, setManage] = useState(false);
   const [confirmReset, setConfirmReset] = useState<string | null>(null);
   const [floats, setFloats] = useState<FloatScore[]>([]);
@@ -93,8 +95,8 @@ export default function Page() {
       ? 'Dead level. Someone do the dishes.'
       : `${(lead > 0 ? p1 : p2).name} leads by ${Math.abs(lead)}`;
 
-  // This player's board: everything shared, plus what is theirs alone.
-  const active = state.habits.filter(h => !h.archived && (!h.owner || h.owner === who));
+  // The same habits on both boards: identical lists, separate ticks.
+  const active = state.habits.filter(h => !h.archived);
   const daily = active.filter(h => h.kind === 'daily' || h.kind === 'multi');
   const weekly = active.filter(h => h.kind === 'weekly');
   const streaks = active.filter(h => h.kind === 'streak');
@@ -209,333 +211,389 @@ export default function Page() {
         </span>
       </div>
 
-      {/* ---- Changes waiting on this player's yes ---------------------------- */}
-      {state.proposals.filter(p => p.by !== who).length > 0 && (
-        <>
-          <SectionTitle>Needs your yes</SectionTitle>
-          <div className="space-y-2">
-            {state.proposals
-              .filter(p => p.by !== who)
-              .map(p => {
-                const byName = state.players.find(x => x.id === p.by)!.name;
-                const target = p.kind === 'retire' ? state.habits.find(h => h.id === p.habitId) : p.habit;
-                return (
-                  <div
-                    key={p.id}
-                    className="rounded-2xl border px-4 py-3"
-                    style={{ borderColor: state.players.find(x => x.id === p.by)!.colour, background: 'var(--board-raised)' }}
-                  >
-                    <div className="text-sm">
-                      <span className="font-black uppercase">{byName}</span>{' '}
-                      wants to {p.kind === 'add' ? 'add' : p.kind === 'retire' ? 'retire' : 'change'}{' '}
-                      <span className="font-semibold">
-                        {target ? `${target.emoji} ${target.name}` : 'a habit that no longer exists'}
-                      </span>
-                      {p.kind !== 'retire' && p.habit ? (
-                        <span className="font-score text-xs" style={{ color: 'var(--chalk-dim)' }}>
-                          {' '}(+{p.habit.xp}
-                          {p.habit.kind === 'multi' || p.habit.kind === 'weekly' ? `, x${p.habit.target}` : ''})
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => update(acceptProposal(state, p.id))}
-                        className="rounded-lg px-4 py-1.5 text-xs font-bold"
-                        style={{ background: 'var(--score)', color: 'var(--board)' }}
-                      >
-                        Go on then
-                      </button>
-                      <button
-                        onClick={() => update(rejectProposal(state, p.id))}
-                        className="rounded-lg border px-4 py-1.5 text-xs font-semibold"
-                        style={{ borderColor: 'var(--dust)', color: 'var(--chalk-dim)' }}
-                      >
-                        No chance
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </>
-      )}
-
-      {/* ---- Today ---------------------------------------------------------- */}
-      <SectionTitle>Today</SectionTitle>
-      <div className="grid grid-cols-2 gap-2">
-        {daily.map(habit => {
-          const mine = ticksOn(state, habit.id, who, t);
-          const other = ticksOn(state, habit.id, who === 'p1' ? 'p2' : 'p1', t);
-          const done = habit.kind === 'multi' ? mine >= habit.target : mine >= 1;
-          return (
-            <div
-              key={habit.id}
-              role="button"
-              tabIndex={0}
-              onClick={e => tick(e, habit)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') tick(e as unknown as React.MouseEvent, habit);
-              }}
-              className={`cursor-pointer rounded-2xl border p-3 text-left transition-transform active:scale-[0.97] ${stamped === habit.id ? 'stamp' : ''}`}
-              style={{
-                borderColor: done ? me.colour : 'var(--dust)',
-                background: done ? 'var(--board-raised)' : 'transparent',
-              }}
-            >
-              <div className="flex items-start justify-between">
-                <span className="text-2xl">{habit.emoji}</span>
-                <span className="font-score text-[11px]" style={{ color: done ? 'var(--score)' : 'var(--chalk-dim)' }}>
-                  {done ? 'done' : `+${habit.xp}`}
-                </span>
-              </div>
-              <div className="mt-1 text-sm font-semibold leading-tight">
-                {habit.name}
-                {habit.owner && (
-                  <span className="font-score ml-1.5 text-[9px] font-bold uppercase" style={{ color: me.colour }}>
-                    yours
-                  </span>
-                )}
-              </div>
-              {habit.detail && (
-                <div className="mt-0.5 text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
-                  {habit.detail}
-                </div>
-              )}
-              {habit.kind === 'multi' ? (
-                <div className="mt-2 flex gap-1">
-                  {Array.from({ length: habit.target }, (_, i) => (
-                    <span
-                      key={i}
-                      className="h-2 flex-1 rounded-full"
-                      style={{ background: i < mine ? me.colour : 'var(--dust)' }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-2 h-2 rounded-full" style={{ background: done ? me.colour : 'var(--dust)' }} />
-              )}
-              {!habit.owner && other > 0 && (
-                <div className="font-score mt-1.5 text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-                  {state.players.find(p => p.id !== who)!.name} has this ✓
-                </div>
-              )}
-              {habit.kind === 'multi' && mine > 0 && (
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    update(setTicks(state, habit.id, who, t, mine - 1));
-                  }}
-                  className="font-score mt-1.5 text-[10px] underline-offset-2 hover:underline"
-                  style={{ color: 'var(--chalk-dim)' }}
-                >
-                  − take one back
-                </button>
-              )}
-            </div>
-          );
-        })}
+      {/* ---- Which half of the app ------------------------------------------ */}
+      {/* The tally is its own tab. It is not a habit you are trying to do more
+          of, the numbers on it are read differently, and it should not be the
+          thing you scroll past on the way to ticking the dishes off. */}
+      <div className="mt-3 flex overflow-hidden rounded-xl border text-sm" style={{ borderColor: 'var(--dust)' }}>
+        {([
+          ['board', 'The board'],
+          ['cutting', 'Cutting down'],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className="flex-1 py-2.5 font-bold uppercase tracking-wide transition-colors"
+            style={
+              tab === id
+                ? { background: 'var(--chalk)', color: 'var(--board)' }
+                : { background: 'transparent', color: 'var(--chalk-dim)' }
+            }
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* ---- This week ------------------------------------------------------ */}
-      <SectionTitle>This week</SectionTitle>
-      <div className="space-y-2">
-        {weekly.map(habit => {
-          const mine = ticksInWeek(state, habit.id, who, monday);
-          const others = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
-          const done = mine >= habit.target;
-          return (
-            <div
-              key={habit.id}
-              role="button"
-              tabIndex={0}
-              onClick={e => weeklyTick(e, habit)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') weeklyTick(e as unknown as React.MouseEvent, habit);
-              }}
-              className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === habit.id ? 'stamp' : ''}`}
-              style={{ borderColor: done ? me.colour : 'var(--dust)', background: done ? 'var(--board-raised)' : 'transparent' }}
-            >
-              <span className="text-2xl">{habit.emoji}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold leading-tight">
-                  {habit.name}
-                  {habit.owner && (
-                    <span className="font-score ml-1.5 text-[9px] font-bold uppercase" style={{ color: me.colour }}>
-                      yours
-                    </span>
-                  )}
-                </span>
-                {habit.detail && (
-                  <span className="mt-0.5 block text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
-                    {habit.detail}
+      {tab === 'board' && (
+        <>
+        {/* ---- Changes waiting on this player's yes ---------------------------- */}
+        {state.proposals.filter(p => p.by !== who).length > 0 && (
+          <>
+            <SectionTitle>Needs your yes</SectionTitle>
+            <div className="space-y-2">
+              {state.proposals
+                .filter(p => p.by !== who)
+                .map(p => {
+                  const byName = state.players.find(x => x.id === p.by)!.name;
+                  const target = p.kind === 'retire' ? state.habits.find(h => h.id === p.habitId) : p.habit;
+                  return (
+                    <div
+                      key={p.id}
+                      className="rounded-2xl border px-4 py-3"
+                      style={{ borderColor: state.players.find(x => x.id === p.by)!.colour, background: 'var(--board-raised)' }}
+                    >
+                      <div className="text-sm">
+                        <span className="font-black uppercase">{byName}</span>{' '}
+                        wants to {p.kind === 'add' ? 'add' : p.kind === 'retire' ? 'retire' : 'change'}{' '}
+                        <span className="font-semibold">
+                          {target ? `${target.emoji} ${target.name}` : 'a habit that no longer exists'}
+                        </span>
+                        {p.kind !== 'retire' && p.habit ? (
+                          <span className="font-score text-xs" style={{ color: 'var(--chalk-dim)' }}>
+                            {' '}(+{p.habit.xp}
+                            {p.habit.kind === 'multi' || p.habit.kind === 'weekly' ? `, x${p.habit.target}` : ''})
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => update(acceptProposal(state, p.id))}
+                          className="rounded-lg px-4 py-1.5 text-xs font-bold"
+                          style={{ background: 'var(--score)', color: 'var(--board)' }}
+                        >
+                          Go on then
+                        </button>
+                        <button
+                          onClick={() => update(rejectProposal(state, p.id))}
+                          className="rounded-lg border px-4 py-1.5 text-xs font-semibold"
+                          style={{ borderColor: 'var(--dust)', color: 'var(--chalk-dim)' }}
+                        >
+                          No chance
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </>
+        )}
+
+        {/* ---- Today ---------------------------------------------------------- */}
+        <SectionTitle>Today</SectionTitle>
+        <div className="grid grid-cols-2 gap-2">
+          {daily.map(habit => {
+            const mine = ticksOn(state, habit.id, who, t);
+            const other = ticksOn(state, habit.id, who === 'p1' ? 'p2' : 'p1', t);
+            const done = habit.kind === 'multi' ? mine >= habit.target : mine >= 1;
+            return (
+              <div
+                key={habit.id}
+                role="button"
+                tabIndex={0}
+                onClick={e => tick(e, habit)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') tick(e as unknown as React.MouseEvent, habit);
+                }}
+                className={`cursor-pointer rounded-2xl border p-3 text-left transition-transform active:scale-[0.97] ${stamped === habit.id ? 'stamp' : ''}`}
+                style={{
+                  borderColor: done ? me.colour : 'var(--dust)',
+                  background: done ? 'var(--board-raised)' : 'transparent',
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <span className="text-2xl">{habit.emoji}</span>
+                  <span className="font-score text-[11px]" style={{ color: done ? 'var(--score)' : 'var(--chalk-dim)' }}>
+                    {done ? 'done' : `+${habit.xp}`}
                   </span>
+                </div>
+                <div className="mt-1 text-sm font-semibold leading-tight">{habit.name}</div>
+                {habit.detail && (
+                  <div className="mt-0.5 text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+                    {habit.detail}
+                  </div>
                 )}
-                <span className="mt-1.5 flex gap-1">
-                  {Array.from({ length: Math.max(habit.target, mine) }, (_, i) => (
-                    <span
-                      key={i}
-                      className="h-2 w-5 rounded-full"
-                      style={{ background: i < mine ? me.colour : 'var(--dust)' }}
-                    />
-                  ))}
-                </span>
-                {mine > 0 && (
+                {habit.kind === 'multi' ? (
+                  <div className="mt-2 flex gap-1">
+                    {Array.from({ length: habit.target }, (_, i) => (
+                      <span
+                        key={i}
+                        className="h-2 flex-1 rounded-full"
+                        style={{ background: i < mine ? me.colour : 'var(--dust)' }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 h-2 rounded-full" style={{ background: done ? me.colour : 'var(--dust)' }} />
+                )}
+                {other > 0 && (
+                  <div className="font-score mt-1.5 text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+                    {state.players.find(p => p.id !== who)!.name} has this ✓
+                  </div>
+                )}
+                {habit.kind === 'multi' && mine > 0 && (
                   <button
                     onClick={e => {
                       e.stopPropagation();
-                      update(untickWeek(state, habit.id, who, monday));
+                      update(setTicks(state, habit.id, who, t, mine - 1));
                     }}
-                    className="font-score mt-1 text-[10px] underline-offset-2 hover:underline"
+                    className="font-score mt-1.5 text-[10px] underline-offset-2 hover:underline"
                     style={{ color: 'var(--chalk-dim)' }}
                   >
                     − take one back
                   </button>
                 )}
-              </span>
-              <span className="text-right">
-                <span className="font-score block text-sm font-bold">
-                  {mine}/{habit.target}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ---- This week ------------------------------------------------------ */}
+        <SectionTitle>This week</SectionTitle>
+        <div className="space-y-2">
+          {weekly.map(habit => {
+            const mine = ticksInWeek(state, habit.id, who, monday);
+            const others = ticksInWeek(state, habit.id, who === 'p1' ? 'p2' : 'p1', monday);
+            const done = mine >= habit.target;
+            return (
+              <div
+                key={habit.id}
+                role="button"
+                tabIndex={0}
+                onClick={e => weeklyTick(e, habit)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') weeklyTick(e as unknown as React.MouseEvent, habit);
+                }}
+                className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === habit.id ? 'stamp' : ''}`}
+                style={{ borderColor: done ? me.colour : 'var(--dust)', background: done ? 'var(--board-raised)' : 'transparent' }}
+              >
+                <span className="text-2xl">{habit.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold leading-tight">{habit.name}</span>
+                  {habit.detail && (
+                    <span className="mt-0.5 block text-[10px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+                      {habit.detail}
+                    </span>
+                  )}
+                  <span className="mt-1.5 flex gap-1">
+                    {Array.from({ length: Math.max(habit.target, mine) }, (_, i) => (
+                      <span
+                        key={i}
+                        className="h-2 w-5 rounded-full"
+                        style={{ background: i < mine ? me.colour : 'var(--dust)' }}
+                      />
+                    ))}
+                  </span>
+                  {mine > 0 && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        update(untickWeek(state, habit.id, who, monday));
+                      }}
+                      className="font-score mt-1 text-[10px] underline-offset-2 hover:underline"
+                      style={{ color: 'var(--chalk-dim)' }}
+                    >
+                      − take one back
+                    </button>
+                  )}
                 </span>
-                {!habit.owner && (
+                <span className="text-right">
+                  <span className="font-score block text-sm font-bold">
+                    {mine}/{habit.target}
+                  </span>
                   <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
                     {state.players.find(p => p.id !== who)!.name}: {others}/{habit.target}
                   </span>
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ---- This week's challenges ----------------------------------------- */}
-      <SectionTitle>This week&apos;s challenges</SectionTitle>
-      <div className="space-y-2">
-        {challengesFor(monday).map(ch => {
-          const mineDone = challengeClaimed(state, ch.id, who, monday);
-          const otherDone = challengeClaimed(state, ch.id, who === 'p1' ? 'p2' : 'p1', monday);
-          return (
-            <button
-              key={ch.id}
-              onClick={e => {
-                if (!canTick) return;
-                if (mineDone) {
-                  // Claimed by mistake: taking it back is one tap too.
-                  update(unclaimChallenge(state, challengeKey(ch.id), who, monday));
-                  return;
-                }
-                update(setTicks(state, challengeKey(ch.id), who, t, 1));
-                stamp(challengeKey(ch.id));
-                pop(e, `+${ch.xp}`);
-              }}
-              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === challengeKey(ch.id) ? 'stamp' : ''}`}
-              style={{
-                borderColor: mineDone ? 'var(--score)' : 'var(--dust)',
-                background: mineDone ? 'var(--board-raised)' : 'transparent',
-              }}
-            >
-              <span className="text-2xl">{ch.emoji}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold leading-tight">{ch.name}</span>
-                <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
-                  {mineDone ? 'tap to take it back' : 'once a week'}
-                  {otherDone ? ` · ${state.players.find(p => p.id !== who)!.name} has it` : ''}
                 </span>
-              </span>
-              <span
-                className="font-score text-sm font-bold"
-                style={{ color: mineDone ? 'var(--score)' : 'var(--chalk)' }}
-              >
-                {mineDone ? 'claimed' : `+${ch.xp}`}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ---- The hard-won days ---------------------------------------------- */}
-      <SectionTitle>The hard-won days</SectionTitle>
-      <div className="space-y-2">
-        {streaks.map(habit => {
-          const s = streakFor(state, habit.id, who);
-          const days = s ? streakDays(s.startedOn, t) : 0;
-          const mult = streakMultiplier(days);
-          const next = nextMilestone(days);
-          const otherS = streakFor(state, habit.id, who === 'p1' ? 'p2' : 'p1');
-          const otherDays = otherS ? streakDays(otherS.startedOn, t) : 0;
-          return (
-            <div
-              key={habit.id}
-              className="rounded-2xl border px-4 py-3"
-              style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{habit.emoji}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold leading-tight">{habit.name}</div>
-                  <div className="font-score mt-0.5 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
-                    {next ? `${next - days} to day ${next}` : 'past every milestone'}
-                    {s && s.best > 0 ? ` · best ${s.best}` : ''}
-                    {` · ${state.players.find(p => p.id !== who)!.name}: ${otherDays}`}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span
-                    className="font-score block text-3xl font-black leading-none"
-                    style={{ color: me.colour, transform: 'rotate(-1.5deg)' }}
-                  >
-                    {days}
-                  </span>
-                  <span className="font-score text-[10px]" style={{ color: 'var(--score)' }}>
-                    +{Math.round(habit.xp * mult)}/day{mult > 1 ? ` · x${mult}` : ''}
-                  </span>
-                </div>
               </div>
-              {confirmReset === habit.id ? (
-                <div className="mt-3 rounded-xl border px-3 py-2.5" style={{ borderColor: 'var(--care)' }}>
-                  <p className="text-xs leading-snug" style={{ color: 'var(--chalk)' }}>
-                    Day 0 it is - telling the truth is the hard part, and the {Math.max(days, s?.best ?? 0)}-day
-                    best stays yours. Back on it tomorrow.
-                  </p>
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      onClick={() => {
-                        update(resetStreak(state, habit.id, who));
-                        setConfirmReset(null);
-                      }}
-                      className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                      style={{ background: 'var(--care)', color: 'var(--board)' }}
+            );
+          })}
+        </div>
+
+        {/* ---- This week's challenges ----------------------------------------- */}
+        <SectionTitle>This week&apos;s challenges</SectionTitle>
+        <div className="space-y-2">
+          {challengesFor(monday).map(ch => {
+            const mineDone = challengeClaimed(state, ch.id, who, monday);
+            const otherDone = challengeClaimed(state, ch.id, who === 'p1' ? 'p2' : 'p1', monday);
+            return (
+              <button
+                key={ch.id}
+                onClick={e => {
+                  if (!canTick) return;
+                  if (mineDone) {
+                    // Claimed by mistake: taking it back is one tap too.
+                    update(unclaimChallenge(state, challengeKey(ch.id), who, monday));
+                    return;
+                  }
+                  update(setTicks(state, challengeKey(ch.id), who, t, 1));
+                  stamp(challengeKey(ch.id));
+                  pop(e, `+${ch.xp}`);
+                }}
+                className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-transform active:scale-[0.98] ${stamped === challengeKey(ch.id) ? 'stamp' : ''}`}
+                style={{
+                  borderColor: mineDone ? 'var(--score)' : 'var(--dust)',
+                  background: mineDone ? 'var(--board-raised)' : 'transparent',
+                }}
+              >
+                <span className="text-2xl">{ch.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold leading-tight">{ch.name}</span>
+                  <span className="font-score text-[10px]" style={{ color: 'var(--chalk-dim)' }}>
+                    {mineDone ? 'tap to take it back' : 'once a week'}
+                    {otherDone ? ` · ${state.players.find(p => p.id !== who)!.name} has it` : ''}
+                  </span>
+                </span>
+                <span
+                  className="font-score text-sm font-bold"
+                  style={{ color: mineDone ? 'var(--score)' : 'var(--chalk)' }}
+                >
+                  {mineDone ? 'claimed' : `+${ch.xp}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ---- The hard-won days ---------------------------------------------- */}
+        <SectionTitle>The hard-won days</SectionTitle>
+        <div className="space-y-2">
+          {streaks.map(habit => {
+            const s = streakFor(state, habit.id, who);
+            const days = s ? streakDays(s.startedOn, t) : 0;
+            const mult = streakMultiplier(days);
+            const next = nextMilestone(days);
+            const otherS = streakFor(state, habit.id, who === 'p1' ? 'p2' : 'p1');
+            const otherDays = otherS ? streakDays(otherS.startedOn, t) : 0;
+            return (
+              <div
+                key={habit.id}
+                className="rounded-2xl border px-4 py-3"
+                style={{ borderColor: 'var(--dust)', background: 'var(--board-raised)' }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{habit.emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold leading-tight">{habit.name}</div>
+                    <div className="font-score mt-0.5 text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
+                      {next ? `${next - days} to day ${next}` : 'past every milestone'}
+                      {s && s.best > 0 ? ` · best ${s.best}` : ''}
+                      {` · ${state.players.find(p => p.id !== who)!.name}: ${otherDays}`}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span
+                      className="font-score block text-3xl font-black leading-none"
+                      style={{ color: me.colour, transform: 'rotate(-1.5deg)' }}
                     >
-                      Reset to day 0
-                    </button>
-                    <button
-                      onClick={() => setConfirmReset(null)}
-                      className="rounded-lg border px-3 py-1.5 text-xs"
-                      style={{ borderColor: 'var(--dust)' }}
-                    >
-                      Keep counting
-                    </button>
+                      {days}
+                    </span>
+                    <span className="font-score text-[10px]" style={{ color: 'var(--score)' }}>
+                      +{Math.round(habit.xp * mult)}/day{mult > 1 ? ` · x${mult}` : ''}
+                    </span>
                   </div>
                 </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmReset(habit.id)}
-                  className="font-score mt-2 text-[11px] underline-offset-2 hover:underline"
-                  style={{ color: 'var(--chalk-dim)' }}
-                >
-                  slipped? reset honestly
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {confirmReset === habit.id ? (
+                  <div className="mt-3 rounded-xl border px-3 py-2.5" style={{ borderColor: 'var(--care)' }}>
+                    <p className="text-xs leading-snug" style={{ color: 'var(--chalk)' }}>
+                      Day 0 it is - telling the truth is the hard part, and the {Math.max(days, s?.best ?? 0)}-day
+                      best stays yours. Back on it tomorrow.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => {
+                          update(resetStreak(state, habit.id, who));
+                          setConfirmReset(null);
+                        }}
+                        className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                        style={{ background: 'var(--care)', color: 'var(--board)' }}
+                      >
+                        Reset to day 0
+                      </button>
+                      <button
+                        onClick={() => setConfirmReset(null)}
+                        className="rounded-lg border px-3 py-1.5 text-xs"
+                        style={{ borderColor: 'var(--dust)' }}
+                      >
+                        Keep counting
+                      </button>
+                    </div>
+                  </div>
+                ) : s ? (
+                  <button
+                    onClick={() => setConfirmReset(habit.id)}
+                    className="font-score mt-2 text-[11px] underline-offset-2 hover:underline"
+                    style={{ color: 'var(--chalk-dim)' }}
+                  >
+                    slipped? reset honestly
+                  </button>
+                ) : (
+                  canTick && (
+                    <button
+                      onClick={() => update(resetStreak(state, habit.id, who))}
+                      className="font-score mt-2 rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
+                      style={{ borderColor: 'var(--score)', color: 'var(--score)' }}
+                    >
+                      start counting from today
+                    </button>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-      {/* ---- Cutting down --------------------------------------------------- */}
-      {tallies.length > 0 && (
-        <>
-          <SectionTitle>Cutting down</SectionTitle>
-          <div className="space-y-2">
+        {/* ---- The ledger ------------------------------------------------------ */}
+        {state.history.length > 0 && (
+          <>
+            <SectionTitle>Bragging rights</SectionTitle>
+            <div className="space-y-1.5">
+              {[...state.history].reverse().slice(0, 8).map(w => {
+                const winner = w.p1 === w.p2 ? null : w.p1 > w.p2 ? p1 : p2;
+                return (
+                  <div
+                    key={w.weekOf}
+                    className="font-score flex items-center justify-between rounded-xl border px-3 py-2 text-xs"
+                    style={{ borderColor: 'var(--dust)' }}
+                  >
+                    <span style={{ color: 'var(--chalk-dim)' }}>
+                      {new Date(w.weekOf + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                    </span>
+                    <span>
+                      <span style={{ color: p1.colour }}>{w.p1}</span>
+                      <span style={{ color: 'var(--chalk-dim)' }}> - </span>
+                      <span style={{ color: p2.colour }}>{w.p2}</span>
+                    </span>
+                    <span className="font-semibold">{winner ? `${winner.emoji} ${winner.name}` : 'draw'}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        </>
+      )}
+
+      {/* ---- Cutting down: its own tab, because it is its own thing ------- */}
+      {tab === 'cutting' && (
+        <div className="mt-4">
+          {tallies.length === 0 ? (
+            <p className="text-sm leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+              Nothing on the tally yet. Add one under players &amp; habits as a
+              &ldquo;cutting down&rdquo; habit and it lands here.
+            </p>
+          ) : (
+            <div className="space-y-2">
             {tallies.map(habit => (
               <Tracker
                 key={habit.id}
@@ -550,37 +608,9 @@ export default function Page() {
                 stamped={stamped}
               />
             ))}
-          </div>
-        </>
-      )}
-
-      {/* ---- The ledger ------------------------------------------------------ */}
-      {state.history.length > 0 && (
-        <>
-          <SectionTitle>Bragging rights</SectionTitle>
-          <div className="space-y-1.5">
-            {[...state.history].reverse().slice(0, 8).map(w => {
-              const winner = w.p1 === w.p2 ? null : w.p1 > w.p2 ? p1 : p2;
-              return (
-                <div
-                  key={w.weekOf}
-                  className="font-score flex items-center justify-between rounded-xl border px-3 py-2 text-xs"
-                  style={{ borderColor: 'var(--dust)' }}
-                >
-                  <span style={{ color: 'var(--chalk-dim)' }}>
-                    {new Date(w.weekOf + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                  </span>
-                  <span>
-                    <span style={{ color: p1.colour }}>{w.p1}</span>
-                    <span style={{ color: 'var(--chalk-dim)' }}> - </span>
-                    <span style={{ color: p2.colour }}>{w.p2}</span>
-                  </span>
-                  <span className="font-semibold">{winner ? `${winner.emoji} ${winner.name}` : 'draw'}</span>
-                </div>
-              );
-            })}
-          </div>
-        </>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ---- Where things stand ---------------------------------------------- */}

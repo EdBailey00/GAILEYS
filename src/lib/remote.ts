@@ -31,7 +31,6 @@ interface HabitRow {
   kind: Habit['kind'];
   target: number;
   xp: number;
-  owner: 'p1' | 'p2' | null;
   archived: boolean;
   unit_cost_pence: number | null;
   sort: number;
@@ -121,7 +120,7 @@ export async function pull(): Promise<GameState> {
     supabase.from('players').select('id, name, emoji, colour').order('id'),
     supabase
       .from('habits')
-      .select('id, name, detail, emoji, kind, target, xp, owner, archived, unit_cost_pence, sort')
+      .select('id, name, detail, emoji, kind, target, xp, archived, unit_cost_pence, sort')
       .order('sort'),
     supabase.from('completions').select('habit_id, player_id, date, count, spent_pence'),
     supabase.from('streaks').select('habit_id, player_id, started_on, best'),
@@ -157,7 +156,6 @@ function toHabit(r: HabitRow): Habit {
     xp: r.xp,
   };
   if (r.detail) h.detail = r.detail;
-  if (r.owner) h.owner = r.owner;
   if (r.archived) h.archived = true;
   if (r.unit_cost_pence !== null) h.unitCost = r.unit_cost_pence;
   return h;
@@ -245,7 +243,10 @@ export async function send(op: Op): Promise<void> {
         kind: h.kind,
         target: h.target,
         xp: h.xp,
-        owner: h.owner ?? null,
+        // Both brothers play every habit now, so nothing is owned. Written as
+        // null rather than left alone, so the column drains as habits are
+        // edited instead of keeping values nothing reads.
+        owner: null,
         archived: h.archived ?? false,
         unit_cost_pence: h.unitCost ?? null,
       });

@@ -7,7 +7,7 @@
 // is why half of this file is about asking rather than doing.
 
 import { useState } from 'react';
-import { type GameState, type Habit, type Player, today } from '@/lib/game';
+import type { GameState, Habit, Player } from '@/lib/game';
 import { newId, propose } from '@/lib/store';
 import { supabase } from '@/lib/supabase';
 
@@ -46,7 +46,6 @@ export function Manage({
   const [kind, setKind] = useState<Habit['kind']>('daily');
   const [target, setTarget] = useState(1);
   const [xp, setXp] = useState(10);
-  const [whose, setWhose] = useState<'both' | 'mine'>('both');
   const [notice, setNotice] = useState('');
 
   const otherName = state.players.find(p => p.id !== who)!.name;
@@ -61,28 +60,17 @@ export function Manage({
       kind,
       target: kind === 'tally' ? 0 : Math.max(1, target),
       xp: Math.max(1, xp),
-      ...(whose === 'mine' ? { owner: who } : {}),
     };
-    if (whose === 'mine') {
-      // Your own board is yours to change.
-      const streaks =
-        kind === 'streak'
-          ? [...state.streaks, { habitId: habit.id, playerId: who, startedOn: today(), best: 0 }]
-          : state.streaks;
-      onChange({ ...state, habits: [...state.habits, habit], streaks });
-      setNotice(`${habit.name} is on your board.`);
-    } else {
-      // The shared board is nobody's to change alone.
-      onChange(propose(state, { by: who, kind: 'add', habit }));
-      setNotice(`Sent to ${otherName} for a yes.`);
-    }
+    // One board, both brothers on it, so it is nobody's to change alone.
+    onChange(propose(state, { by: who, kind: 'add', habit }));
+    setNotice(`Sent to ${otherName} for a yes.`);
     setName('');
     setDetail('');
   };
 
   const retire = (h: Habit) => {
-    if (h.archived || h.owner) {
-      // Bringing back, or your own habit: instant.
+    if (h.archived) {
+      // Bringing one back is instant - it was already agreed once.
       onChange({
         ...state,
         habits: state.habits.map(x => (x.id === h.id ? { ...x, archived: !x.archived } : x)),
@@ -94,8 +82,7 @@ export function Manage({
     setNotice(`Retiring ${h.name} needs ${otherName}'s yes.`);
   };
 
-  // Inline habit editing. Your own habits change on the spot; shared ones go
-  // to the other player as an edit proposal.
+  // Inline habit editing. Every habit is shared, so a change is a proposal.
   const [editing, setEditing] = useState<Habit | null>(null);
 
   const saveEdit = () => {
@@ -106,13 +93,8 @@ export function Manage({
       target: editing.kind === 'tally' ? 0 : Math.max(1, editing.target),
       xp: Math.max(1, editing.xp),
     };
-    if (clean.owner) {
-      onChange({ ...state, habits: state.habits.map(x => (x.id === clean.id ? clean : x)) });
-      setNotice(`${clean.name} updated.`);
-    } else {
-      onChange(propose(state, { by: who, kind: 'edit', habit: clean }));
-      setNotice(`Change to ${clean.name} sent to ${otherName} for a yes.`);
-    }
+    onChange(propose(state, { by: who, kind: 'edit', habit: clean }));
+    setNotice(`Change to ${clean.name} sent to ${otherName} for a yes.`);
     setEditing(null);
   };
 
@@ -228,29 +210,16 @@ export function Manage({
             style={inputStyle}
           />
         </div>
-        <div className="mt-2 flex overflow-hidden rounded-xl border text-sm" style={{ borderColor: 'var(--dust)' }}>
-          <button
-            onClick={() => setWhose('both')}
-            className="flex-1 py-2 font-semibold"
-            style={whose === 'both' ? { background: 'var(--chalk)', color: 'var(--board)' } : { color: 'var(--chalk-dim)' }}
-          >
-            Both of us
-          </button>
-          <button
-            onClick={() => setWhose('mine')}
-            className="flex-1 py-2 font-semibold"
-            style={whose === 'mine' ? { background: 'var(--chalk)', color: 'var(--board)' } : { color: 'var(--chalk-dim)' }}
-          >
-            Just mine
-          </button>
-        </div>
         <button
           onClick={addHabit}
           className="mt-2 w-full rounded-xl py-2.5 text-sm font-bold"
           style={{ background: 'var(--chalk)', color: 'var(--board)' }}
         >
-          {whose === 'both' ? `Add it (${otherName} gets a say)` : 'Add it'}
+          Add it ({otherName} gets a say)
         </button>
+        <p className="mt-1.5 text-[11px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
+          Every habit is both of yours. Whatever goes on, you both get it.
+        </p>
         {notice && (
           <p className="font-score mt-2 text-[11px]" style={{ color: 'var(--score)' }}>
             {notice}
@@ -273,14 +242,6 @@ export function Manage({
               >
                 <span>
                   {h.emoji} {h.name}
-                  {h.owner && (
-                    <span
-                      className="font-score ml-1.5 text-[9px] font-bold uppercase"
-                      style={{ color: state.players.find(p => p.id === h.owner)!.colour }}
-                    >
-                      {state.players.find(p => p.id === h.owner)!.name}&apos;s
-                    </span>
-                  )}
                 </span>
                 {pendingRetire ? (
                   <span className="font-score text-[11px]" style={{ color: 'var(--chalk-dim)' }}>
@@ -361,7 +322,7 @@ export function Manage({
                 className="rounded-lg px-4 py-1.5 text-xs font-bold"
                 style={{ background: 'var(--chalk)', color: 'var(--board)' }}
               >
-                {editing.owner ? 'Save' : `Save (${otherName} gets a say)`}
+                Save ({otherName} gets a say)
               </button>
               <button
                 onClick={() => setEditing(null)}
