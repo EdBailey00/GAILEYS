@@ -26,7 +26,7 @@ import {
 import { acceptProposal, rejectProposal, setTicks, unclaimChallenge, untickWeek } from '@/lib/store';
 import { useBoard } from '@/lib/useBoard';
 import { useChat } from '@/lib/chat';
-import { isDemo } from '@/lib/demo';
+import { isDemo, leaveDemo } from '@/lib/demo';
 import { ChooseBrother } from '@/components/Gate';
 import { Chat } from '@/components/Chat';
 import { CounterCircles, CountersPage } from '@/components/Counters';
@@ -164,6 +164,13 @@ export default function Page() {
           <div className="mt-0.5 text-[11px] leading-snug" style={{ color: 'var(--chalk-dim)' }}>
             Made-up board, made-up players. Press anything you like - none of it reaches anyone.
           </div>
+          <button
+            onClick={leaveDemo}
+            className="font-score mt-1 text-[10px] underline-offset-2 hover:underline"
+            style={{ color: 'var(--chalk-dim)' }}
+          >
+            leave the demo
+          </button>
         </div>
       )}
       {/* ---- The week, and the tug of war ---------------------------------- */}

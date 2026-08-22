@@ -14,12 +14,45 @@
 import type { GameState } from './game';
 import { dayKey, weekOf } from './game';
 
-/** ?demo on the url, and nothing else, decides this. */
-export const isDemo = (): boolean =>
-  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demo');
-
 /** This tester's taps, kept apart from the real board's copy. */
 export const DEMO_KEY = 'bragging-rights-demo';
+
+/**
+ * That this phone is a demo phone, remembered.
+ *
+ * ?demo alone is not enough. The manifest's start_url is './', so adding the
+ * page to a home screen from a demo url gives you an icon that opens the app
+ * with no query on it - and that would be the real board, on a stranger's
+ * phone, which is the one outcome this whole thing exists to prevent. Once a
+ * device has been sent here it stays here until it says otherwise.
+ */
+const DEMO_FLAG = 'bragging-rights-demo-mode';
+
+export const isDemo = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (new URLSearchParams(window.location.search).has('demo')) {
+      localStorage.setItem(DEMO_FLAG, '1');
+      return true;
+    }
+    return localStorage.getItem(DEMO_FLAG) === '1';
+  } catch {
+    // Storage blocked. Fall back to the url, which is the safe answer either
+    // way: the query says demo or it does not.
+    return new URLSearchParams(window.location.search).has('demo');
+  }
+};
+
+/** Out of the demo and back to the real thing, taking the invented board with it. */
+export function leaveDemo(): void {
+  try {
+    localStorage.removeItem(DEMO_FLAG);
+    localStorage.removeItem(DEMO_KEY);
+  } catch {
+    // Nothing stored, nothing to clear.
+  }
+  window.location.href = window.location.pathname;
+}
 
 const back = (days: number): string => {
   const d = new Date();
